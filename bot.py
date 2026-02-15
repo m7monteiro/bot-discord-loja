@@ -145,7 +145,7 @@ async def comprar_rockstar(interaction: discord.Interaction):
     )
 
     embed.add_field(name="💰 Preço", value="R$ 4,99", inline=False)
-    embed.set_image(url="https://cdn.discordapp.com/attachments/1472115881436905483/1472688688675684526/VELAR_2.png")
+    embed.set_image(url="https://cdn.discordapp.com/attachments/1472115881436905483/1472688688675684526/VELAR_2.png?ex=69937bb8&is=69922a38&hm=0acb656efc6464acb1a63c2b71a98e66aebedf68f17326bb1847945173131320")
     embed.set_footer(text="Legend Store — Todos os direitos reservados ©")
 
     view = discord.ui.View()
