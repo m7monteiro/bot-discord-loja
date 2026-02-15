@@ -111,10 +111,15 @@ async def comprar(interaction: discord.Interaction):
 
     embed.add_field(name="💰 Preço", value="R$ 24,99", inline=False)
 
+    embed.set_footer(
+        text="Legend Store — Todos os direitos reservados ©"
+    )
+
     view = discord.ui.View()
     view.add_item(discord.ui.Button(label="🛒 Comprar", url=link))
 
     await interaction.response.send_message(embed=embed, view=view)
+
 
 # ===============================
 # COMANDO /COMPRAR ROCKSTAR
@@ -124,21 +129,32 @@ async def comprar_rockstar(interaction: discord.Interaction):
 
     link = criar_pagamento_rockstar(interaction.user.id)
 
+    if not link:
+        await interaction.response.send_message("❌ Erro pagamento", ephemeral=True)
+        return
+
     embed = discord.Embed(
-    title="🎮 Conta Rockstar",
-    description="✅ Conta pronta\n✅ Entrega manual\n✅ Garantia",
-    color=0x3498db
-)
+        title="🎮 Conta Rockstar",
+        description="✅ Conta pronta\n✅ Entrega manual\n✅ Garantia",
+        color=0x3498db
+    )
 
-embed.add_field(name="💰 Preço", value="R$ 4,99", inline=False)
+    embed.add_field(name="💰 Preço", value="R$ 4,99", inline=False)
 
-embed.set_image(
-    url="https://discord.com/channels/1472114509068898367/1472115881436905483/1472688688562569328"
-)
+    # ⚠️ IMPORTANTE: link de imagem precisa ser URL DIRETA de imagem
+    embed.set_image(
+        url="https://SEU-LINK-DIRETO-DA-IMAGEM.png"
+    )
 
-embed.set_footer(
-    text="Legend Store — Todos os direitos reservados ©"
-)
+    embed.set_footer(
+        text="Legend Store — Todos os direitos reservados ©"
+    )
+
+    view = discord.ui.View()
+    view.add_item(discord.ui.Button(label="🛒 Comprar", url=link))
+
+    await interaction.response.send_message(embed=embed, view=view)
+
 
 # ===============================
 # WEBHOOK
