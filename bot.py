@@ -10,17 +10,11 @@ import sys
 print("🔧 Iniciando bot...")
 
 # ===============================
-# CONFIG
+# CONFIG — VEM DO RENDER ENV VARS
 # ===============================
-KEY: DISCORD_TOKEN
-VALUE: (token novo)
-
-KEY: MP_ACCESS_TOKEN
-VALUE: (token novo)
-
-KEY: WEBHOOK_URL
-VALUE: https://bot-discord-loja-eg7u.onrender.com/webhook
-")
+DISCORD_TOKEN = os.environ["DISCORD_TOKEN"]
+MP_ACCESS_TOKEN = os.environ["MP_ACCESS_TOKEN"]
+WEBHOOK_URL = os.environ["WEBHOOK_URL"]
 
 ARQUIVO_PRODUTO = "produto.txt"
 
@@ -120,14 +114,8 @@ async def comprar(interaction: discord.Interaction):
     )
 
     embed.add_field(name="💰 Preço", value="R$ 24,99", inline=False)
-
-    embed.set_image(
-        url="https://cdn.discordapp.com/attachments/1472115881436905483/1472691849130016953/VELAR_1.png"
-    )
-
-    embed.set_footer(
-        text="Legend Store — Todos os direitos reservados ©"
-    )
+    embed.set_image(url="https://cdn.discordapp.com/attachments/1472115881436905483/1472691849130016953/VELAR_1.png")
+    embed.set_footer(text="Legend Store — Todos os direitos reservados ©")
 
     view = discord.ui.View()
     view.add_item(discord.ui.Button(label="🛒 Comprar", url=link))
@@ -153,14 +141,8 @@ async def comprar_rockstar(interaction: discord.Interaction):
     )
 
     embed.add_field(name="💰 Preço", value="R$ 4,99", inline=False)
-
-    embed.set_image(
-        url="https://cdn.discordapp.com/attachments/1472115881436905483/1472688688675684526/VELAR_2.png"
-    )
-
-    embed.set_footer(
-        text="Legend Store — Todos os direitos reservados ©"
-    )
+    embed.set_image(url="https://cdn.discordapp.com/attachments/1472115881436905483/1472688688675684526/VELAR_2.png")
+    embed.set_footer(text="Legend Store — Todos os direitos reservados ©")
 
     view = discord.ui.View()
     view.add_item(discord.ui.Button(label="🛒 Comprar", url=link))
@@ -234,5 +216,15 @@ async def enviar_produto_manual(user_id):
     print("📨 Aviso manual enviado")
 
 # ===============================
-# FLASK
-# =======
+# FLASK + START
+# ===============================
+def iniciar_flask():
+    print("🌐 Flask online")
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
+def start_all():
+    threading.Thread(target=iniciar_flask, daemon=True).start()
+    bot.run(DISCORD_TOKEN)
+
+if __name__ == "__main__":
+    start_all()
