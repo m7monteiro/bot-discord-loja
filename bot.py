@@ -86,8 +86,8 @@ async def comprar(interaction: discord.Interaction):
         return
 
     embed = discord.Embed(
-        title="🔥 Pack Premium",
-        description="✅ Acesso completo\n✅ Arquivos exclusivos\n✅ Suporte VIP",
+        title="🔥 Cheat Counter Strike ",
+        description="✅ Acesso completo\n✅ Arquivos exclusivos\n✅ Suporte VIP\n✅ Entrega Automatica",
         color=0x00ff88
     )
 
