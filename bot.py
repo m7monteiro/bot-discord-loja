@@ -67,6 +67,17 @@ class Bot(discord.Client):
 
     async def on_ready(self):
         print(f"🟢 Logado como {self.user}")
+    async def on_member_join(self, member):
+        try:
+            guild = member.guild
+            cargo_membro = guild.get_role(1472666559049633952)
+
+            if cargo_membro:
+                await member.add_roles(cargo_membro)
+                print("👤 Novo membro recebeu cargo MEMBRO")
+
+        except Exception as e:
+            print("❌ Erro ao dar cargo membro:", e)
 
 bot = Bot()
 
@@ -152,6 +163,21 @@ async def enviar_produto(user_id):
             "✅ Pagamento confirmado! Aqui está seu produto:",
             file=discord.File(ARQUIVO_PRODUTO)
         )
+        # ===== DAR CARGO CLIENTE =====
+        guild = bot.get_guild(1472114509068898367)
+        member = guild.get_member(user_id)
+
+        if member:
+            cargo_cliente = guild.get_role(1472666841515032676)
+            cargo_membro = guild.get_role(1472666559049633952)
+
+            if cargo_membro:
+                await member.remove_roles(cargo_membro)
+
+            if cargo_cliente:
+                await member.add_roles(cargo_cliente)
+
+            print("🏷️ Cargo CLIENTE aplicado")
 
         print("📦 Produto enviado")
 
