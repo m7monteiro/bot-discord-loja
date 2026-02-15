@@ -84,6 +84,34 @@ bot = Bot()
 # ===============================
 # COMANDO /COMPRAR
 # ===============================
+# ===============================
+# COMANDO TESTE CLIENTE (SEM PAGAR)
+# ===============================
+@bot.tree.command(name="teste_cliente", description="TESTE: aplicar cargo cliente sem pagamento")
+async def teste_cliente(interaction: discord.Interaction):
+
+    user_id = interaction.user.id
+
+    guild = bot.get_guild(1472114509068898367)
+    member = guild.get_member(user_id)
+
+    if not member:
+        await interaction.response.send_message("❌ Você não foi encontrado no servidor", ephemeral=True)
+        return
+
+    cargo_cliente = guild.get_role(1472666841515032676)
+    cargo_membro = guild.get_role(1472666559049633952)
+
+    if cargo_membro:
+        await member.remove_roles(cargo_membro)
+
+    if cargo_cliente:
+        await member.add_roles(cargo_cliente)
+
+    await interaction.response.send_message("✅ TESTE OK — Cargo CLIENTE aplicado!", ephemeral=True)
+
+    print("🧪 TESTE: cargo cliente aplicado")
+
 @bot.tree.command(name="comprar", description="Comprar Pack Premium")
 async def comprar(interaction: discord.Interaction):
 
