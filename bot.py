@@ -14,7 +14,11 @@ print("🔧 Iniciando bot...")
 # ===============================
 DISCORD_TOKEN = os.environ["DISCORD_TOKEN"]
 MP_ACCESS_TOKEN = os.environ["MP_ACCESS_TOKEN"]
-WEBHOOK_URL = os.environ["WEBHOOK_URL"]
+WEBHOOK_URL = os.environ.get(
+    "WEBHOOK_URL",
+    "https://bot-discord-loja-eg7u.onrender.com/webhook"
+)
+
 
 ARQUIVO_PRODUTO = "produto.txt"
 
