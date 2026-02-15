@@ -10,7 +10,7 @@ import sys
 print("🔧 Iniciando bot...")
 
 # ===============================
-# CONFIG (VEM DO RENDER)
+# CONFIG
 # ===============================
 DISCORD_TOKEN = os.environ["DISCORD_TOKEN"]
 MP_ACCESS_TOKEN = os.environ["MP_ACCESS_TOKEN"]
@@ -21,6 +21,10 @@ ARQUIVO_PRODUTO = "produto.txt"
 if not os.path.exists(ARQUIVO_PRODUTO):
     print("❌ produto.txt não encontrado")
     sys.exit()
+
+GUILD_ID = 1472114509068898367
+CARGO_MEMBRO = 1472666559049633952
+CARGO_CLIENTE = 1472666841515032676
 
 # ===============================
 # MERCADO PAGO
@@ -84,15 +88,15 @@ class Bot(discord.Client):
         print(f"🟢 Logado como {self.user}")
 
     async def on_member_join(self, member):
-        cargo_membro = member.guild.get_role(1472666559049633952)
-        if cargo_membro:
-            await member.add_roles(cargo_membro)
-            print("👤 Novo membro recebeu cargo MEMBRO")
+        cargo = member.guild.get_role(CARGO_MEMBRO)
+        if cargo:
+            await member.add_roles(cargo)
+            print("👤 Cargo MEMBRO aplicado")
 
 bot = Bot()
 
 # ===============================
-# COMANDO /COMPRAR CS
+# COMANDO — CS AUTOMÁTICO
 # ===============================
 @bot.tree.command(name="comprar", description="Comprar Pack Premium")
 async def comprar(interaction: discord.Interaction):
@@ -103,26 +107,29 @@ async def comprar(interaction: discord.Interaction):
         await interaction.response.send_message("❌ Erro pagamento", ephemeral=True)
         return
 
-   embed = discord.Embed(
-    title="🔥 Cheat Counter Strike",
-    description="✅ Acesso completo\n✅ Arquivos exclusivos\n✅ Suporte VIP\n✅ Entrega Automática",
-    color=0x00ff88
-)
+    embed = discord.Embed(
+        title="🔥 Cheat Counter Strike",
+        description="✅ Acesso completo\n✅ Arquivos exclusivos\n✅ Suporte VIP\n✅ Entrega Automática",
+        color=0x00ff88
+    )
 
-embed.add_field(name="💰 Preço", value="R$ 24,99", inline=False)
+    embed.add_field(name="💰 Preço", value="R$ 24,99", inline=False)
 
-embed.set_image(
-    url="https://cdn.discordapp.com/attachments/1472115881436905483/1472691849130016953/VELAR_1.png?ex=69937eaa&is=69922d2a&hm=18e4b4fc0d971b1b9a44052e954792ae71c6f7cf1bc87635a0bc4c262d7d22d1"
-)
+    embed.set_image(
+        url="https://cdn.discordapp.com/attachments/1472115881436905483/1472691849130016953/VELAR_1.png"
+    )
 
-embed.set_footer(
-    text="Legend Store — Todos os direitos reservados ©"
-)
+    embed.set_footer(
+        text="Legend Store — Todos os direitos reservados ©"
+    )
 
+    view = discord.ui.View()
+    view.add_item(discord.ui.Button(label="🛒 Comprar", url=link))
 
+    await interaction.response.send_message(embed=embed, view=view)
 
 # ===============================
-# COMANDO /COMPRAR ROCKSTAR
+# COMANDO — ROCKSTAR MANUAL
 # ===============================
 @bot.tree.command(name="comprar_rockstar", description="Comprar Conta Rockstar")
 async def comprar_rockstar(interaction: discord.Interaction):
@@ -134,22 +141,25 @@ async def comprar_rockstar(interaction: discord.Interaction):
         return
 
     embed = discord.Embed(
-    title="🎮 Conta Rockstar",
-    description="✅ Conta pronta\n✅ Entrega manual\n✅ Garantia",
-    color=0x3498db
-)
+        title="🎮 Conta Rockstar",
+        description="✅ Conta pronta\n✅ Entrega manual\n✅ Garantia",
+        color=0x3498db
+    )
 
-embed.add_field(name="💰 Preço", value="R$ 4,99", inline=False)
+    embed.add_field(name="💰 Preço", value="R$ 4,99", inline=False)
 
-embed.set_image(
-    url="https://cdn.discordapp.com/attachments/1472115881436905483/1472688688675684526/VELAR_2.png?ex=69937bb8&is=69922a38&hm=0acb656efc6464acb1a63c2b71a98e66aebedf68f17326bb1847945173131320"
-)
+    embed.set_image(
+        url="https://cdn.discordapp.com/attachments/1472115881436905483/1472688688675684526/VELAR_2.png"
+    )
 
-embed.set_footer(
-    text="Legend Store — Todos os direitos reservados ©"
-)
+    embed.set_footer(
+        text="Legend Store — Todos os direitos reservados ©"
+    )
 
+    view = discord.ui.View()
+    view.add_item(discord.ui.Button(label="🛒 Comprar", url=link))
 
+    await interaction.response.send_message(embed=embed, view=view)
 
 # ===============================
 # WEBHOOK
@@ -183,7 +193,7 @@ def webhook():
     return "OK", 200
 
 # ===============================
-# ENTREGA AUTOMÁTICA
+# ENTREGA AUTOMÁTICA CS
 # ===============================
 async def enviar_produto(user_id):
 
@@ -194,17 +204,17 @@ async def enviar_produto(user_id):
         file=discord.File(ARQUIVO_PRODUTO)
     )
 
-    guild = bot.get_guild(1472114509068898367)
+    guild = bot.get_guild(GUILD_ID)
     member = guild.get_member(user_id)
 
     if member:
-        await member.remove_roles(guild.get_role(1472666559049633952))
-        await member.add_roles(guild.get_role(1472666841515032676))
+        await member.remove_roles(guild.get_role(CARGO_MEMBRO))
+        await member.add_roles(guild.get_role(CARGO_CLIENTE))
 
     print("📦 Produto CS entregue")
 
 # ===============================
-# ENTREGA MANUAL
+# ENTREGA MANUAL ROCKSTAR
 # ===============================
 async def enviar_produto_manual(user_id):
 
@@ -219,14 +229,4 @@ async def enviar_produto_manual(user_id):
 
 # ===============================
 # FLASK
-# ===============================
-def iniciar_flask():
-    print("🌐 Flask online")
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
-def start_all():
-    threading.Thread(target=iniciar_flask, daemon=True).start()
-    bot.run(DISCORD_TOKEN)
-
-if __name__ == "__main__":
-    start_all()
+# =======
