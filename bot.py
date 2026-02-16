@@ -148,20 +148,20 @@ bot = Bot()
 # ===============================
 class BotaoComprar(discord.ui.View):
     def __init__(self, produto: str, user_id: int):
-        super().__init__(timeout=300)  # 5 minutos de timeout
+        super().__init__(timeout=300)
         self.produto = produto
         self.user_id = user_id
     
     @discord.ui.button(label="🛒 Comprar Agora", style=discord.ButtonStyle.green, emoji="💳")
     async def botao_comprar(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # DEFER imediato no botão também
+        # DEFER imediato no botão
         await interaction.response.defer()
         
         # Desabilitar o botão para não clicar de novo
         button.disabled = True
         await interaction.edit_original_response(view=self)
         
-        # Enviar uma mensagem "processando"
+        # Enviar mensagem de processamento
         await interaction.followup.send("⏳ Gerando seu pagamento PIX...", ephemeral=True)
         
         # Gerar PIX
@@ -216,41 +216,50 @@ class BotaoComprar(discord.ui.View):
             await interaction.followup.send(embed=embed_pix, file=file)
 
 # ===============================
-# COMANDOS DE COMPRA
+# COMANDOS DE COMPRA - CORRIGIDOS COM DEFER
 # ===============================
 @bot.tree.command(name="comprar", description="Comprar Pack Counter Strike")
 async def comprar(interaction: discord.Interaction):
-    # DEFER imediato
+    # DEFER imediato - resolve o erro 404
     await interaction.response.defer()
     
+    # Embed do produto CS
     embed = discord.Embed(
         title="🔥 Cheat Counter Strike",
         description="✅ Acesso completo\n✅ Arquivos exclusivos\n✅ Suporte VIP\n✅ Entrega Automática",
         color=0x00ff88
     )
     embed.add_field(name="💰 Preço", value="R$ 24,99", inline=False)
-    embed.set_image(url="https://i.imgur.com/EuTrxjn.png")  # ← COLOQUE A URL REAL
+    embed.set_image(url="https://cdn.discordapp.com/attachments/1349553066143121420/1473068186382635049/VELAR_1.png?ex=6994dd27&is=69938ba7&hm=b2d428b6bd4bc96a0b4b2d6bca65cc561aa8668e1227d99117aae8a3c4ec71a9&")
     embed.set_footer(text="Legend Store — Todos os direitos reservados ©")
     
+    # Criar view com botão
     view = BotaoComprar(produto="cs", user_id=interaction.user.id)
+    
+    # Usar followup.send (não response.send_message)
     await interaction.followup.send(embed=embed, view=view)
 
 @bot.tree.command(name="comprar_rockstar", description="Comprar Conta Rockstar")
 async def comprar_rockstar(interaction: discord.Interaction):
-    # DEFER imediato
+    # DEFER imediato - resolve o erro 404
     await interaction.response.defer()
     
+    # Embed do produto Rockstar
     embed = discord.Embed(
         title="🎮 Conta Rockstar",
-        description="✅ Conta pronta\n✅ Entrega Automatica\n✅ Garantia",
+        description="✅ Conta pronta\n✅ Entrega Automática\n✅ Garantia",
         color=0x3498db
     )
     embed.add_field(name="💰 Preço", value="R$ 4,99", inline=False)
-    embed.set_image(url="https://i.imgur.com/ppmITej.png")  # ← COLOQUE A URL REAL
+    embed.set_image(url="https://cdn.discordapp.com/attachments/1349553066143121420/1473068185216352266/VELAR_2.png?ex=6994dd27&is=69938ba7&hm=8339309f4fdb8dcc7875f639b780f1b14d0f3bb66280e47d9d7f80b92c153cb5&")
     embed.set_footer(text="Legend Store — Todos os direitos reservados ©")
     
+    # Criar view com botão
     view = BotaoComprar(produto="rockstar", user_id=interaction.user.id)
+    
+    # Usar followup.send (não response.send_message)
     await interaction.followup.send(embed=embed, view=view)
+
 # ===============================
 # WEBHOOK
 # ===============================
