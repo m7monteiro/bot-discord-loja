@@ -148,32 +148,37 @@ bot = Bot()
 # ===============================
 class BotaoComprar(discord.ui.View):
     def __init__(self, produto: str, user_id: int):
-        super().__init__(timeout=300)
+        super().__init__(timeout=300)  # 5 minutos de timeout
         self.produto = produto
         self.user_id = user_id
     
-  @discord.ui.button(label="🛒 Comprar Agora", style=discord.ButtonStyle.green, emoji="💳")
-async def botao_comprar(self, interaction: discord.Interaction, button: discord.ui.Button):
-    # DEFER imediato no botão também
-    await interaction.response.defer()
-    
-    # Desabilitar o botão para não clicar de novo
-    button.disabled = True
-    await interaction.edit_original_response(view=self)
-    
-    # Resto do código continua igual...
+    @discord.ui.button(label="🛒 Comprar Agora", style=discord.ButtonStyle.green, emoji="💳")
+    async def botao_comprar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # DEFER imediato no botão também
+        await interaction.response.defer()
+        
+        # Desabilitar o botão para não clicar de novo
+        button.disabled = True
+        await interaction.edit_original_response(view=self)
+        
+        # Enviar uma mensagem "processando"
+        await interaction.followup.send("⏳ Gerando seu pagamento PIX...", ephemeral=True)
+        
+        # Gerar PIX
         pix_data = criar_pagamento_pix(self.user_id, self.produto)
         
         if not pix_data:
             await interaction.followup.send("❌ Erro ao gerar pagamento. Tente novamente mais tarde.", ephemeral=True)
             return
         
+        # Criar embed do PIX
         embed_pix = discord.Embed(
             title="🧾 Pagamento PIX Gerado!",
             description=f"**Produto:** {pix_data['produto']}\n**Valor:** R$ {pix_data['preco']:.2f}",
             color=0x00ff88
         )
         
+        # Calcular expiração
         try:
             expiracao = datetime.fromisoformat(pix_data["expiration"].replace("Z", "+00:00"))
             tempo_restante = expiracao - datetime.now(expiracao.tzinfo)
@@ -201,8 +206,10 @@ async def botao_comprar(self, interaction: discord.Interaction, button: discord.
         
         embed_pix.set_footer(text="O produto será entregue automaticamente após a confirmação!")
         
+        # Converter QR code para imagem
         qr_image_data = base64.b64decode(pix_data["qr_code_base64"])
         
+        # Enviar PIX
         with BytesIO(qr_image_data) as image_binary:
             image_binary.seek(0)
             file = discord.File(fp=image_binary, filename="qrcode.png")
