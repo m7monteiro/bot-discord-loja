@@ -23,7 +23,6 @@ WEBHOOK_URL = os.environ.get(
     "https://bot-discord-loja-eg7u.onrender.com/webhook"
 )
 
-
 ARQUIVO_PRODUTO = "produto.txt"
 
 if not os.path.exists(ARQUIVO_PRODUTO):
@@ -65,7 +64,7 @@ def criar_pagamento_pix(user_id, produto="cs"):
         "description": produto_info["nome"],
         "payment_method_id": "pix",
         "payer": {
-            "email": f"cliente_{user_id}@temp.com"  # Email temporário
+            "email": f"cliente_{user_id}@temp.com"
         },
         "external_reference": f"{produto}_{user_id}_{int(time.time())}",
         "notification_url": WEBHOOK_URL
@@ -76,68 +75,23 @@ def criar_pagamento_pix(user_id, produto="cs"):
         
         if result["status"] == 201:
             payment = result["response"]
-            
-            # Extrair dados do PIX
             pix_data = payment["point_of_interaction"]["transaction_data"]
             
             return {
-                "qr_code": pix_data["qr_code"],  # Código copia e cola
-                "qr_code_base64": pix_data["qr_code_base64"],  # QR code em base64
+                "qr_code": pix_data["qr_code"],
+                "qr_code_base64": pix_data["qr_code_base64"],
                 "expiration": payment["date_of_expiration"],
                 "payment_id": payment["id"],
                 "produto": produto_info["nome"],
                 "preco": produto_info["preco"],
                 "referencia": payment["external_reference"]
             }
+        else:
+            print(f"❌ Erro MP: {result}")
+            return None
     except Exception as e:
         print(f"❌ Erro ao criar PIX: {e}")
         return None
-    
-    return None
-
-def criar_embed_pix(pix_data, interaction):
-    """Cria um embed bonito com as informações do PIX"""
-    
-    # Converter QR code base64 para imagem
-    qr_image_data = base64.b64decode(pix_data["qr_code_base64"])
-    
-    embed = discord.Embed(
-        title="🧾 Pagamento PIX Gerado!",
-        description=f"**Produto:** {pix_data['produto']}\n**Valor:** R$ {pix_data['preco']:.2f}",
-        color=0x00ff88
-    )
-    
-    # Calcular tempo de expiração (15 minutos do MP)
-    expiracao = datetime.fromisoformat(pix_data["expiration"].replace("Z", "+00:00"))
-    tempo_restante = expiracao - datetime.now(expiracao.tzinfo)
-    minutos = int(tempo_restante.total_seconds() / 60)
-    
-    embed.add_field(
-        name="⏰ Expira em", 
-        value=f"{minutos} minutos", 
-        inline=True
-    )
-    
-    embed.add_field(
-        name="📋 Código PIX", 
-        value="```" + pix_data["qr_code"] + "```", 
-        inline=False
-    )
-    
-    embed.add_field(
-        name="✅ Como pagar",
-        value=(
-            "1️⃣ Copie o código PIX acima\n"
-            "2️⃣ Abra o app do seu banco\n"
-            "3️⃣ Escolha a opção PIX copia e cola\n"
-            "4️⃣ Cole o código e confirme o pagamento"
-        ),
-        inline=False
-    )
-    
-    embed.set_footer(text="O produto será entregue automaticamente após a confirmação!")
-    
-    return embed, qr_image_data
 
 # ===============================
 # DISCORD
@@ -167,40 +121,110 @@ class Bot(discord.Client):
 bot = Bot()
 
 # ===============================
+# CLASSE DO BOTÃO DE COMPRA
+# ===============================
+class BotaoComprar(discord.ui.View):
+    def __init__(self, produto: str, user_id: int):
+        super().__init__(timeout=300)  # 5 minutos de timeout
+        self.produto = produto
+        self.user_id = user_id
+    
+    @discord.ui.button(label="🛒 Comprar Agora", style=discord.ButtonStyle.green, emoji="💳")
+    async def botao_comprar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Desabilitar o botão para não clicar de novo
+        button.disabled = True
+        await interaction.response.edit_message(view=self)
+        
+        # Enviar uma mensagem "processando"
+        await interaction.followup.send("⏳ Gerando seu pagamento PIX...", ephemeral=True)
+        
+        # Gerar PIX
+        pix_data = criar_pagamento_pix(self.user_id, self.produto)
+        
+        if not pix_data:
+            await interaction.followup.send("❌ Erro ao gerar pagamento. Tente novamente mais tarde.", ephemeral=True)
+            return
+        
+        # Criar embed do PIX
+        embed_pix = discord.Embed(
+            title="🧾 Pagamento PIX Gerado!",
+            description=f"**Produto:** {pix_data['produto']}\n**Valor:** R$ {pix_data['preco']:.2f}",
+            color=0x00ff88
+        )
+        
+        # Calcular expiração
+        try:
+            expiracao = datetime.fromisoformat(pix_data["expiration"].replace("Z", "+00:00"))
+            tempo_restante = expiracao - datetime.now(expiracao.tzinfo)
+            minutos = int(tempo_restante.total_seconds() / 60)
+            embed_pix.add_field(name="⏰ Expira em", value=f"{minutos} minutos", inline=True)
+        except:
+            embed_pix.add_field(name="⏰ Expira em", value="15 minutos", inline=True)
+        
+        embed_pix.add_field(
+            name="📋 Código PIX", 
+            value=f"```{pix_data['qr_code']}```", 
+            inline=False
+        )
+        
+        embed_pix.add_field(
+            name="✅ Como pagar",
+            value=(
+                "1️⃣ Copie o código PIX acima\n"
+                "2️⃣ Abra o app do seu banco\n"
+                "3️⃣ Escolha a opção PIX copia e cola\n"
+                "4️⃣ Cole o código e confirme o pagamento"
+            ),
+            inline=False
+        )
+        
+        embed_pix.set_footer(text="O produto será entregue automaticamente após a confirmação!")
+        
+        # Converter QR code para imagem
+        qr_image_data = base64.b64decode(pix_data["qr_code_base64"])
+        
+        # Enviar PIX
+        with BytesIO(qr_image_data) as image_binary:
+            image_binary.seek(0)
+            file = discord.File(fp=image_binary, filename="qrcode.png")
+            await interaction.followup.send(embed=embed_pix, file=file)
+
+# ===============================
 # COMANDOS DE COMPRA
 # ===============================
 @bot.tree.command(name="comprar", description="Comprar Pack Counter Strike")
 async def comprar(interaction: discord.Interaction):
-    await comprar_produto(interaction, "cs")
+    # Embed do produto CS
+    embed = discord.Embed(
+        title="🔥 Cheat Counter Strike",
+        description="✅ Acesso completo\n✅ Arquivos exclusivos\n✅ Suporte VIP\n✅ Entrega Automática",
+        color=0x00ff88
+    )
+    embed.add_field(name="💰 Preço", value="R$ 24,99", inline=False)
+    embed.set_image(url="https://cdn.discordapp.com/attachments/1472115881436905483/1472691849130016953/VELAR_1.png")
+    embed.set_footer(text="Legend Store — Todos os direitos reservados ©")
+    
+    # Criar view com botão
+    view = BotaoComprar(produto="cs", user_id=interaction.user.id)
+    
+    await interaction.response.send_message(embed=embed, view=view)
 
 @bot.tree.command(name="comprar_rockstar", description="Comprar Conta Rockstar")
 async def comprar_rockstar(interaction: discord.Interaction):
-    await comprar_produto(interaction, "rockstar")
-
-async def comprar_produto(interaction: discord.Interaction, produto: str):
-    """Função genérica para comprar produtos com PIX"""
+    # Embed do produto Rockstar
+    embed = discord.Embed(
+        title="🎮 Conta Rockstar",
+        description="✅ Conta pronta\n✅ Entrega manual\n✅ Garantia",
+        color=0x3498db
+    )
+    embed.add_field(name="💰 Preço", value="R$ 4,99", inline=False)
+    embed.set_image(url="https://cdn.discordapp.com/attachments/1472115881436905483/1472688688675684526/VELAR_2.png?ex=69937bb8&is=69922a38&hm=0acb656efc6464acb1a63c2b71a98e66aebedf68f17326bb1847945173131320")
+    embed.set_footer(text="Legend Store — Todos os direitos reservados ©")
     
-    await interaction.response.defer(ephemeral=False)  # Para não dar timeout
+    # Criar view com botão
+    view = BotaoComprar(produto="rockstar", user_id=interaction.user.id)
     
-    # Gerar PIX
-    pix_data = criar_pagamento_pix(interaction.user.id, produto)
-    
-    if not pix_data:
-        await interaction.followup.send("❌ Erro ao gerar pagamento. Tente novamente mais tarde.")
-        return
-    
-    # Criar embed e imagem QR code
-    embed, qr_image_data = criar_embed_pix(pix_data, interaction)
-    
-    # Criar arquivo temporário do QR code
-    with BytesIO(qr_image_data) as image_binary:
-        image_binary.seek(0)
-        file = discord.File(fp=image_binary, filename="qrcode.png")
-        
-        # Enviar embed com QR code
-        await interaction.followup.send(embed=embed, file=file)
-    
-    print(f"💰 PIX gerado para {interaction.user.name} - Produto: {produto}")
+    await interaction.response.send_message(embed=embed, view=view)
 
 # ===============================
 # WEBHOOK
@@ -213,25 +237,17 @@ def webhook():
     print("📩 webhook recebido:", data)
 
     try:
-        # Verificar se é notificação de pagamento
         if "data" in data and "id" in data["data"]:
             payment_id = data["data"]["id"]
-            
-            # Buscar detalhes do pagamento
             payment = sdk.payment().get(payment_id)["response"]
             
-            print(f"💰 Status do pagamento: {payment['status']}")
-            print(f"📌 Referência externa: {payment.get('external_reference')}")
+            print(f"💰 Status: {payment['status']}")
             
-            # Se pagamento foi aprovado
             if payment["status"] == "approved":
-                
                 ref = payment["external_reference"]
-                
-                # Extrair informações da referência
                 partes = ref.split('_')
-                produto = partes[0]  # cs ou rockstar
-                user_id = int(partes[1])  # ID do usuário
+                produto = partes[0]
+                user_id = int(partes[1])
                 
                 print(f"✅ Pagamento aprovado! Produto: {produto}, Usuário: {user_id}")
                 
@@ -239,16 +255,8 @@ def webhook():
                     asyncio.run_coroutine_threadsafe(enviar_produto(user_id), bot.loop)
                 elif produto == "rockstar":
                     asyncio.run_coroutine_threadsafe(enviar_produto_manual(user_id), bot.loop)
-                
-            elif payment["status"] == "pending":
-                print("⏳ Pagamento pendente (ainda não pago)")
-            elif payment["status"] == "rejected":
-                print("❌ Pagamento rejeitado")
-                
     except Exception as e:
         print("❌ Erro no webhook:", e)
-        import traceback
-        traceback.print_exc()
 
     return "OK", 200
 
@@ -256,35 +264,28 @@ def webhook():
 # ENTREGA AUTOMÁTICA CS
 # ===============================
 async def enviar_produto(user_id):
-
     user = await bot.fetch_user(user_id)
-
     await user.send(
         "✅ Pagamento confirmado! Aqui está seu produto:",
         file=discord.File(ARQUIVO_PRODUTO)
     )
-
+    
     guild = bot.get_guild(GUILD_ID)
     member = guild.get_member(user_id)
-
     if member:
         await member.remove_roles(guild.get_role(CARGO_MEMBRO))
         await member.add_roles(guild.get_role(CARGO_CLIENTE))
-
     print("📦 Produto CS entregue")
 
 # ===============================
 # ENTREGA MANUAL ROCKSTAR
 # ===============================
 async def enviar_produto_manual(user_id):
-
     user = await bot.fetch_user(user_id)
-
     await user.send(
         "✅ Pagamento aprovado!\n"
         "📦 Sua Conta Rockstar será entregue em breve por um administrador."
     )
-
     print("📨 Aviso manual enviado")
 
 # ===============================
