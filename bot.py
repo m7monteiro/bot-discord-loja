@@ -152,13 +152,16 @@ class BotaoComprar(discord.ui.View):
         self.produto = produto
         self.user_id = user_id
     
-    @discord.ui.button(label="🛒 Comprar Agora", style=discord.ButtonStyle.green, emoji="💳")
-    async def botao_comprar(self, interaction: discord.Interaction, button: discord.ui.Button):
-        button.disabled = True
-        await interaction.response.edit_message(view=self)
-        
-        await interaction.followup.send("⏳ Gerando seu pagamento PIX...", ephemeral=True)
-        
+  @discord.ui.button(label="🛒 Comprar Agora", style=discord.ButtonStyle.green, emoji="💳")
+async def botao_comprar(self, interaction: discord.Interaction, button: discord.ui.Button):
+    # DEFER imediato no botão também
+    await interaction.response.defer()
+    
+    # Desabilitar o botão para não clicar de novo
+    button.disabled = True
+    await interaction.edit_original_response(view=self)
+    
+    # Resto do código continua igual...
         pix_data = criar_pagamento_pix(self.user_id, self.produto)
         
         if not pix_data:
@@ -210,31 +213,45 @@ class BotaoComprar(discord.ui.View):
 # ===============================
 @bot.tree.command(name="comprar", description="Comprar Pack Counter Strike")
 async def comprar(interaction: discord.Interaction):
+    # DEFER imediato - avisa o Discord para esperar
+    await interaction.response.defer()
+    
+    # Embed do produto CS com a imagem original
     embed = discord.Embed(
         title="🔥 Cheat Counter Strike",
         description="✅ Acesso completo\n✅ Arquivos exclusivos\n✅ Suporte VIP\n✅ Entrega Automática",
         color=0x00ff88
     )
     embed.add_field(name="💰 Preço", value="R$ 24,99", inline=False)
-    embed.set_image(url="https://i.imgur.com/EuTrxjn.png")  # ← VOCÊ SUBSTITUI AQUI
+    embed.set_image(url="https://i.imgur.com/SUA_IMAGEM_CS_AQUI.png")  ← COLOQUE A URL DA IMAGEM
     embed.set_footer(text="Legend Store — Todos os direitos reservados ©")
     
+    # Criar view com botão
     view = BotaoComprar(produto="cs", user_id=interaction.user.id)
-    await interaction.response.send_message(embed=embed, view=view)
+    
+    # Agora sim, envia a resposta
+    await interaction.followup.send(embed=embed, view=view)
 
 @bot.tree.command(name="comprar_rockstar", description="Comprar Conta Rockstar")
 async def comprar_rockstar(interaction: discord.Interaction):
+    # DEFER imediato
+    await interaction.response.defer()
+    
+    # Embed do produto Rockstar com a imagem original
     embed = discord.Embed(
         title="🎮 Conta Rockstar",
         description="✅ Conta pronta\n✅ Entrega Automatica\n✅ Garantia",
         color=0x3498db
     )
     embed.add_field(name="💰 Preço", value="R$ 4,99", inline=False)
-    embed.set_image(url="https://i.imgur.com/ppmITej.png")  # ← VOCÊ SUBSTITUI AQUI
+    embed.set_image(url="https://i.imgur.com/SUA_IMAGEM_ROCKSTAR_AQUI.png")  ← COLOQUE A URL DA IMAGEM
     embed.set_footer(text="Legend Store — Todos os direitos reservados ©")
     
+    # Criar view com botão
     view = BotaoComprar(produto="rockstar", user_id=interaction.user.id)
-    await interaction.response.send_message(embed=embed, view=view)
+    
+    # Agora sim, envia a resposta
+    await interaction.followup.send(embed=embed, view=view)
 
 # ===============================
 # WEBHOOK
