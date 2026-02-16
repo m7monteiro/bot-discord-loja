@@ -194,7 +194,7 @@ class BotaoComprar(discord.ui.View):
 # ===============================
 @bot.tree.command(name="comprar", description="Comprar Pack Counter Strike")
 async def comprar(interaction: discord.Interaction):
-    # Embed do produto CS
+    # Embed do produto CS com a imagem original
     embed = discord.Embed(
         title="🔥 Cheat Counter Strike",
         description="✅ Acesso completo\n✅ Arquivos exclusivos\n✅ Suporte VIP\n✅ Entrega Automática",
@@ -211,7 +211,7 @@ async def comprar(interaction: discord.Interaction):
 
 @bot.tree.command(name="comprar_rockstar", description="Comprar Conta Rockstar")
 async def comprar_rockstar(interaction: discord.Interaction):
-    # Embed do produto Rockstar
+    # Embed do produto Rockstar com a imagem original
     embed = discord.Embed(
         title="🎮 Conta Rockstar",
         description="✅ Conta pronta\n✅ Entrega manual\n✅ Garantia",
