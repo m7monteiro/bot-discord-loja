@@ -125,34 +125,29 @@ bot = Bot()
 # ===============================
 class BotaoComprar(discord.ui.View):
     def __init__(self, produto: str, user_id: int):
-        super().__init__(timeout=300)  # 5 minutos de timeout
+        super().__init__(timeout=300)
         self.produto = produto
         self.user_id = user_id
     
     @discord.ui.button(label="🛒 Comprar Agora", style=discord.ButtonStyle.green, emoji="💳")
     async def botao_comprar(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Desabilitar o botão para não clicar de novo
         button.disabled = True
         await interaction.response.edit_message(view=self)
         
-        # Enviar uma mensagem "processando"
         await interaction.followup.send("⏳ Gerando seu pagamento PIX...", ephemeral=True)
         
-        # Gerar PIX
         pix_data = criar_pagamento_pix(self.user_id, self.produto)
         
         if not pix_data:
             await interaction.followup.send("❌ Erro ao gerar pagamento. Tente novamente mais tarde.", ephemeral=True)
             return
         
-        # Criar embed do PIX
         embed_pix = discord.Embed(
             title="🧾 Pagamento PIX Gerado!",
             description=f"**Produto:** {pix_data['produto']}\n**Valor:** R$ {pix_data['preco']:.2f}",
             color=0x00ff88
         )
         
-        # Calcular expiração
         try:
             expiracao = datetime.fromisoformat(pix_data["expiration"].replace("Z", "+00:00"))
             tempo_restante = expiracao - datetime.now(expiracao.tzinfo)
@@ -180,10 +175,8 @@ class BotaoComprar(discord.ui.View):
         
         embed_pix.set_footer(text="O produto será entregue automaticamente após a confirmação!")
         
-        # Converter QR code para imagem
         qr_image_data = base64.b64decode(pix_data["qr_code_base64"])
         
-        # Enviar PIX
         with BytesIO(qr_image_data) as image_binary:
             image_binary.seek(0)
             file = discord.File(fp=image_binary, filename="qrcode.png")
@@ -194,36 +187,30 @@ class BotaoComprar(discord.ui.View):
 # ===============================
 @bot.tree.command(name="comprar", description="Comprar Pack Counter Strike")
 async def comprar(interaction: discord.Interaction):
-    # Embed do produto CS com a imagem original
     embed = discord.Embed(
         title="🔥 Cheat Counter Strike",
         description="✅ Acesso completo\n✅ Arquivos exclusivos\n✅ Suporte VIP\n✅ Entrega Automática",
         color=0x00ff88
     )
     embed.add_field(name="💰 Preço", value="R$ 24,99", inline=False)
-    embed.set_image(url="https://cdn.discordapp.com/attachments/1349553066143121420/1473068186382635049/VELAR_1.png?ex=6994dd27&is=69938ba7&hm=b2d428b6bd4bc96a0b4b2d6bca65cc561aa8668e1227d99117aae8a3c4ec71a9&")
+    embed.set_image(url="https://i.imgur.com/EuTrxjn.png")  # ← VOCÊ SUBSTITUI AQUI
     embed.set_footer(text="Legend Store — Todos os direitos reservados ©")
     
-    # Criar view com botão
     view = BotaoComprar(produto="cs", user_id=interaction.user.id)
-    
     await interaction.response.send_message(embed=embed, view=view)
 
 @bot.tree.command(name="comprar_rockstar", description="Comprar Conta Rockstar")
 async def comprar_rockstar(interaction: discord.Interaction):
-    # Embed do produto Rockstar com a imagem original
     embed = discord.Embed(
         title="🎮 Conta Rockstar",
         description="✅ Conta pronta\n✅ Entrega Automatica\n✅ Garantia",
         color=0x3498db
     )
     embed.add_field(name="💰 Preço", value="R$ 4,99", inline=False)
-    embed.set_image(url="https://cdn.discordapp.com/attachments/1349553066143121420/1473068185216352266/VELAR_2.png?ex=6994dd27&is=69938ba7&hm=8339309f4fdb8dcc7875f639b780f1b14d0f3bb66280e47d9d7f80b92c153cb5&")
+    embed.set_image(url="https://i.imgur.com/ppmITej.png")  # ← VOCÊ SUBSTITUI AQUI
     embed.set_footer(text="Legend Store — Todos os direitos reservados ©")
     
-    # Criar view com botão
     view = BotaoComprar(produto="rockstar", user_id=interaction.user.id)
-    
     await interaction.response.send_message(embed=embed, view=view)
 
 # ===============================
