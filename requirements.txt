@@ -1,6 +1,6 @@
-discord.py==2.3.2
-mercadopago==2.3.0
-flask==2.3.3
-Pillow==10.1.0
-requests==2.31.0
-gunicorn==21.2.0
+discord.py
+mercadopago
+flask
+Pillow
+requests
+gunicorn
