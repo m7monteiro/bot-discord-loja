@@ -44,6 +44,8 @@ def criar_pagamento_pix(user_id, produto="cs"):
     Retorna os dados do PIX (QR code, código copia e cola, etc)
     """
     
+    print(f"\n🟡 [DEBUG] Iniciando criação de PIX para user {user_id}, produto {produto}")
+    
     # Definir produto e preço
     produtos = {
         "cs": {
@@ -57,6 +59,14 @@ def criar_pagamento_pix(user_id, produto="cs"):
     }
     
     produto_info = produtos.get(produto, produtos["cs"])
+    print(f"🟡 [DEBUG] Produto: {produto_info['nome']}, Preço: {produto_info['preco']}")
+    
+    # Verificar se o token do MP existe
+    if not MP_ACCESS_TOKEN:
+        print("❌ [DEBUG] MP_ACCESS_TOKEN não está configurado!")
+        return None
+    else:
+        print(f"🟡 [DEBUG] MP_ACCESS_TOKEN começa com: {MP_ACCESS_TOKEN[:10]}...")
     
     # Criar pagamento PIX
     payment_data = {
@@ -70,12 +80,21 @@ def criar_pagamento_pix(user_id, produto="cs"):
         "notification_url": WEBHOOK_URL
     }
     
+    print(f"🟡 [DEBUG] Payment data: {payment_data}")
+    
     try:
+        print("🟡 [DEBUG] Enviando requisição para Mercado Pago...")
         result = sdk.payment().create(payment_data)
         
+        print(f"🟡 [DEBUG] Resposta completa do MP: {result}")
+        
         if result["status"] == 201:
+            print("✅ [DEBUG] PIX criado com sucesso!")
             payment = result["response"]
             pix_data = payment["point_of_interaction"]["transaction_data"]
+            
+            print(f"✅ [DEBUG] Payment ID: {payment['id']}")
+            print(f"✅ [DEBUG] QR Code gerado: {pix_data['qr_code'][:30]}...")
             
             return {
                 "qr_code": pix_data["qr_code"],
@@ -87,10 +106,14 @@ def criar_pagamento_pix(user_id, produto="cs"):
                 "referencia": payment["external_reference"]
             }
         else:
-            print(f"❌ Erro MP: {result}")
+            print(f"❌ [DEBUG] Erro na resposta do MP - Status: {result['status']}")
+            print(f"❌ [DEBUG] Conteúdo do erro: {result}")
             return None
+            
     except Exception as e:
-        print(f"❌ Erro ao criar PIX: {e}")
+        print(f"❌ [DEBUG] Exceção ao criar PIX: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 # ===============================
