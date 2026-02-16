@@ -201,7 +201,7 @@ async def comprar(interaction: discord.Interaction):
         color=0x00ff88
     )
     embed.add_field(name="💰 Preço", value="R$ 24,99", inline=False)
-    embed.set_image(url="https://cdn.discordapp.com/attachments/1472115881436905483/1472691849130016953/VELAR_1.png")
+    embed.set_image(url="https://cdn.discordapp.com/attachments/1349553066143121420/1473068186382635049/VELAR_1.png?ex=6994dd27&is=69938ba7&hm=b2d428b6bd4bc96a0b4b2d6bca65cc561aa8668e1227d99117aae8a3c4ec71a9&")
     embed.set_footer(text="Legend Store — Todos os direitos reservados ©")
     
     # Criar view com botão
@@ -214,11 +214,11 @@ async def comprar_rockstar(interaction: discord.Interaction):
     # Embed do produto Rockstar com a imagem original
     embed = discord.Embed(
         title="🎮 Conta Rockstar",
-        description="✅ Conta pronta\n✅ Entrega manual\n✅ Garantia",
+        description="✅ Conta pronta\n✅ Entrega Automatica\n✅ Garantia",
         color=0x3498db
     )
     embed.add_field(name="💰 Preço", value="R$ 4,99", inline=False)
-    embed.set_image(url="https://cdn.discordapp.com/attachments/1472115881436905483/1472688688675684526/VELAR_2.png?ex=69937bb8&is=69922a38&hm=0acb656efc6464acb1a63c2b71a98e66aebedf68f17326bb1847945173131320")
+    embed.set_image(url="https://cdn.discordapp.com/attachments/1349553066143121420/1473068185216352266/VELAR_2.png?ex=6994dd27&is=69938ba7&hm=8339309f4fdb8dcc7875f639b780f1b14d0f3bb66280e47d9d7f80b92c153cb5&")
     embed.set_footer(text="Legend Store — Todos os direitos reservados ©")
     
     # Criar view com botão
