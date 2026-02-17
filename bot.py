@@ -33,6 +33,9 @@ GUILD_ID = 1472114509068898367
 CARGO_MEMBRO = 1472666559049633952
 CARGO_CLIENTE = 1472666841515032676
 
+# 🟡 ID DO CANAL DE CARRINHOS ATIVOS
+CANAL_CARRINHOS = 1473180070851117108  # Canal #carrinhos-ativos
+
 # ===============================
 # MERCADO PAGO
 # ===============================
@@ -69,13 +72,47 @@ def criar_pagamento_pix(user_id, produto="cs"):
                 "qr_code_base64": pix_data["qr_code_base64"],
                 "expiration": payment["date_of_expiration"],
                 "produto": produto_info["nome"],
-                "preco": produto_info["preco"]
+                "preco": produto_info["preco"],
+                "payment_id": payment["id"]  # Adicionamos o ID do pagamento
             }
     except Exception as e:
         print(f"❌ Erro PIX: {e}")
         return None
     
     return None
+
+# ===============================
+# FUNÇÃO PARA LOG DE CARRINHOS
+# ===============================
+async def log_carrinho_ativo(user, produto_nome, valor, pagamento_id):
+    """
+    Envia uma mensagem no canal de carrinhos ativos
+    quando alguém clica em comprar
+    """
+    try:
+        canal = bot.get_channel(CANAL_CARRINHOS)
+        if not canal:
+            print("❌ Canal de carrinhos não encontrado!")
+            return
+        
+        embed = discord.Embed(
+            title="🛒 **NOVO CARRINHO ATIVO**",
+            color=0xffaa00,  # Amarelo
+            timestamp=datetime.now()
+        )
+        
+        embed.add_field(name="👤 **Cliente**", value=user.mention, inline=True)
+        embed.add_field(name="📦 **Produto**", value=produto_nome, inline=True)
+        embed.add_field(name="💰 **Valor**", value=f"R$ {valor:.2f}", inline=True)
+        embed.add_field(name="⏰ **Horário**", value=datetime.now().strftime("%d/%m/%Y %H:%M:%S"), inline=False)
+        embed.add_field(name="🆔 **Pagamento**", value=f"`{pagamento_id}`", inline=False)
+        embed.set_footer(text="⏳ Aguardando pagamento...")
+        
+        await canal.send(embed=embed)
+        print(f"✅ Log enviado para canal de carrinhos")
+        
+    except Exception as e:
+        print(f"❌ Erro ao enviar log de carrinho: {e}")
 
 # ===============================
 # DISCORD
@@ -142,6 +179,14 @@ class BotaoComprar(discord.ui.View):
             if not pix_data:
                 await user.send("❌ **Erro ao gerar pagamento.** Tente novamente mais tarde.")
                 return
+            
+            # ===== LOG NO CANAL DE CARRINHOS =====
+            await log_carrinho_ativo(
+                user=user,
+                produto_nome=pix_data['produto'],
+                valor=pix_data['preco'],
+                pagamento_id=pix_data.get('payment_id', 'N/A')
+            )
             
             # ===== EMBED DO PIX NO PRIVADO =====
             embed_pix = discord.Embed(
