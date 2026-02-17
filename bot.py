@@ -412,92 +412,150 @@ async def entregar_produto_rockstar(user_id, pagamento_id, produto_info):
         traceback.print_exc()
 
 # ===============================
-# WEBHOOK
+# WEBHOOK E ENTREGAS - VERSÃO SIMPLIFICADA E FUNCIONAL
 # ===============================
 app = Flask(__name__)
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.json
-    print("\n" + "="*60)
-    print("📩 WEBHOOK RECEBIDO:")
+    print("\n" + "🔥"*50)
+    print("🔥 WEBHOOK RECEBIDO:")
     print(data)
-    print("="*60)
+    print("🔥"*50)
     
     try:
+        # Extrair payment_id de qualquer formato que o MP enviar
+        payment_id = None
         if "data" in data and "id" in data["data"]:
             payment_id = data["data"]["id"]
-            print(f"🔍 Payment ID: {payment_id}")
+        elif "id" in data:
+            payment_id = data["id"]
+        
+        if not payment_id:
+            print("❌ Não consegui extrair payment_id")
+            return "OK", 200
+        
+        print(f"✅ Payment ID extraído: {payment_id}")
+        
+        # Buscar detalhes do pagamento
+        payment_response = sdk.payment().get(payment_id)
+        
+        if payment_response["status"] != 200:
+            print(f"❌ Erro ao buscar pagamento: {payment_response}")
+            return "OK", 200
+        
+        payment = payment_response["response"]
+        
+        if payment["status"] != "approved":
+            print(f"⏳ Pagamento não aprovado: {payment['status']}")
+            return "OK", 200
+        
+        # Extrair external_reference
+        ref = payment.get("external_reference", "")
+        print(f"✅ external_reference: {ref}")
+        
+        if not ref:
+            print("❌ external_reference vazia")
+            return "OK", 200
+        
+        partes = ref.split('_')
+        if len(partes) < 2:
+            print(f"❌ Formato inválido: {ref}")
+            return "OK", 200
+        
+        produto = partes[0]
+        user_id = int(partes[1])
+        
+        print(f"✅ PRODUTO: {produto}")
+        print(f"✅ USER_ID: {user_id}")
+        
+        # 🔴 VERIFICAÇÃO: se for seu ID, bloqueia
+        MEU_ID = 1439411460378726530
+        if user_id == MEU_ID:
+            print("❌❌❌ USER_ID É DO DONO! BLOQUEANDO ENTREGA.")
+            return "OK", 200
+        
+        # Buscar usuário no Discord
+        user = bot.get_user(user_id)
+        if not user:
+            print(f"❌ Usuário {user_id} não encontrado no cache, tentando fetch...")
+            try:
+                user = await bot.fetch_user(user_id)
+            except:
+                print(f"❌ Não consegui buscar usuário {user_id}")
+                return "OK", 200
+        
+        if not user:
+            print(f"❌ Usuário {user_id} não existe no Discord")
+            return "OK", 200
+        
+        print(f"✅ Usuário encontrado: {user.name}")
+        
+        # Definir produto info
+        produtos = {
+            "cs": {"nome": "Pack Counter Strike", "preco": 24.99},
+            "rockstar": {"nome": "Conta Rockstar", "preco": 4.99}
+        }
+        produto_info = produtos.get(produto, produtos["cs"])
+        
+        # ===== ENTREGAR PRODUTO =====
+        if produto == "cs":
+            # Entrega automática
+            await user.send(
+                "✅ **Pagamento confirmado!**\nAqui está seu produto:",
+                file=discord.File(ARQUIVO_PRODUTO)
+            )
+            print(f"✅ PRODUTO CS ENVIADO para {user.name}")
             
-            # Buscar detalhes do pagamento
-            print("🔍 Buscando detalhes no Mercado Pago...")
-            payment_response = sdk.payment().get(payment_id)
-            print(f"🔍 Resposta do MP: {payment_response}")
+        elif produto == "rockstar":
+            # Entrega manual
+            await user.send(
+                "✅ **Pagamento aprovado!**\n📦 Sua Conta Rockstar será entregue em breve por um administrador."
+            )
+            print(f"✅ AVISO ROCKSTAR ENVIADO para {user.name}")
+        
+        # Log no canal de pagos
+        canal_pagos = bot.get_channel(CANAL_PAGOS)
+        if canal_pagos:
+            embed = discord.Embed(
+                title="✅ **PAGAMENTO CONFIRMADO**",
+                color=0x00ff88,
+                timestamp=datetime.now()
+            )
+            embed.add_field(name="👤 **Cliente**", value=user.mention, inline=True)
+            embed.add_field(name="📦 **Produto**", value=produto_info["nome"], inline=True)
+            embed.add_field(name="💰 **Valor**", value=f"R$ {produto_info['preco']:.2f}", inline=True)
+            embed.set_footer(text="🎉 Produto entregue com sucesso!")
             
-            if payment_response["status"] == 200:
-                payment = payment_response["response"]
-                
-                print(f"🔍 Status do pagamento: {payment['status']}")
-                
-                if payment["status"] == "approved":
-                    # Extrair external_reference
-                    ref = payment.get("external_reference", "")
-                    print(f"🔍 external_reference: {ref}")
-                    
-                    if ref:
-                        partes = ref.split('_')
-                        print(f"🔍 Partes da referência: {partes}")
-                        
-                        if len(partes) >= 2:
-                            produto = partes[0]
-                            try:
-                                user_id = int(partes[1])
-                                print(f"✅ PAGAMENTO APROVADO!")
-                                print(f"✅ PRODUTO: {produto}")
-                                print(f"✅ USER_ID: {user_id}")
-                                
-                                # 🔴 VERIFICAÇÃO CRÍTICA
-                                if user_id == MEU_ID:
-                                    print("❌❌❌ ERRO: O USER_ID É DO DONO!")
-                                    print("❌❌❌ O PRODUTO VAI PRA VOCÊ EM VEZ DO CLIENTE!")
-                                
-                                # Buscar dados do produto
-                                produtos = {
-                                    "cs": {"nome": "Pack Counter Strike", "preco": 24.99},
-                                    "rockstar": {"nome": "Conta Rockstar", "preco": 4.99}
-                                }
-                                produto_info = produtos.get(produto, produtos["cs"])
-                                
-                                # ===== CHAMAR A ENTREGA DO PRODUTO =====
-                                if produto == "cs":
-                                    print("🔍 Chamando entregar_produto_cs...")
-                                    asyncio.run_coroutine_threadsafe(
-                                        entregar_produto_cs(user_id, payment_id, produto_info),
-                                        bot.loop
-                                    )
-                                elif produto == "rockstar":
-                                    print("🔍 Chamando entregar_produto_rockstar...")
-                                    asyncio.run_coroutine_threadsafe(
-                                        entregar_produto_rockstar(user_id, payment_id, produto_info),
-                                        bot.loop
-                                    )
-                            except ValueError as e:
-                                print(f"❌ Erro ao converter user_id: {partes[1]} - {e}")
-                        else:
-                            print(f"❌ Formato inválido da external_reference: {ref}")
-                    else:
-                        print("❌ external_reference vazia!")
-                else:
-                    print(f"⏳ Pagamento não aprovado: {payment['status']}")
-            else:
-                print(f"❌ Erro na resposta do MP: {payment_response}")
+            await canal_pagos.send(embed=embed)
+        
+        # Remover do carrinho se existir
+        if str(payment_id) in carrinhos_ativos:
+            dados = carrinhos_ativos[str(payment_id)]
+            canal_carrinho = bot.get_channel(dados["canal"])
+            if canal_carrinho:
+                try:
+                    msg = await canal_carrinho.fetch_message(dados["mensagem_id"])
+                    await msg.delete()
+                except:
+                    pass
+            del carrinhos_ativos[str(payment_id)]
+        
+        # Adicionar cargo de cliente
+        guild = bot.get_guild(GUILD_ID)
+        if guild:
+            member = guild.get_member(user_id)
+            if member:
+                await member.remove_roles(guild.get_role(CARGO_MEMBRO))
+                await member.add_roles(guild.get_role(CARGO_CLIENTE))
+        
     except Exception as e:
-        print("❌ ERRO CRÍTICO NO WEBHOOK:")
+        print(f"❌ ERRO NO WEBHOOK: {e}")
         import traceback
         traceback.print_exc()
     
     return "OK", 200
-
 # ===============================
 # START
 # ===============================
