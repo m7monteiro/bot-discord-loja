@@ -159,8 +159,6 @@ class BotaoComprar(discord.ui.View):
             except:
                 embed_pix.add_field(name="⏰ Expira em", value="15 minutos", inline=True)
             
-            # Embed já mostra o código, mas vamos adicionar botão de copiar também
-            
             embed_pix.set_footer(text="Você receberá o produto aqui assim que o pagamento for confirmado!")
             
             # Converter QR Code para imagem
@@ -227,59 +225,6 @@ def webhook():
     
     try:
         if "data" in data and "id" in data["data"]:
-            payment_id = data["data"]["id"]
-            payment = sdk.payment().get(payment_id)["response"]
-            
-            if payment["status"] == "approved":
-                ref = payment["external_reference"]
-                partes = ref.split('_')
-                produto = partes[0]
-                user_id = int(partes[1])
-                
-                print(f"✅ Pagamento aprovado! Produto: {produto}")
-                
-                if produto == "cs":
-                    asyncio.run_coroutine_threadsafe(enviar_produto(user_id), bot.loop)
-                elif produto == "rockstar":
-                    asyncio.run_coroutine_threadsafe(enviar_produto_manual(user_id), bot.loop)
-    except Exception as e:
-        print("❌ Erro webhook:", e)
-    
-    return "OK", 200
-
-async def enviar_produto(user_id):
-    user = await bot.fetch_user(user_id)
-    await user.send(
-        "✅ **Pagamento confirmado!**\nAqui está seu produto:",
-        file=discord.File(ARQUIVO_PRODUTO)
-    )
-    
-    guild = bot.get_guild(GUILD_ID)
-    member = guild.get_member(user_id)
-    if member:
-        await member.remove_roles(guild.get_role(CARGO_MEMBRO))
-        await member.add_roles(guild.get_role(CARGO_CLIENTE))
-    print("📦 Produto CS entregue")
-
-async def enviar_produto_manual(user_id):
-    user = await bot.fetch_user(user_id)
-    await user.send(
-        "✅ **Pagamento aprovado!**\n📦 Sua Conta Rockstar será entregue em breve por um administrador."
-    )
-    print("📨 Aviso manual enviado")
-
-# ===============================
-# START
-# ===============================
-def iniciar_flask():
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
-def start_all():
-    threading.Thread(target=iniciar_flask, daemon=True).start()
-    bot.run(DISCORD_TOKEN)
-
-if __name__ == "__main__":
-    start_all()  if "data" in data and "id" in data["data"]:
             payment_id = data["data"]["id"]
             payment = sdk.payment().get(payment_id)["response"]
             
