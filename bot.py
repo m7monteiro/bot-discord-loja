@@ -37,8 +37,8 @@ CARGO_CLIENTE = 1472666841515032676
 CANAL_CARRINHOS = 1473180070851117108  # Canal #carrinhos-ativos
 CANAL_PAGOS = 1473182832225554554      # Canal #pagamentos-confirmados
 
-# Dicionário para armazenar mensagens de carrinho (simplificado - em produção use banco de dados)
-carrinhos_ativos = {}  # {pagamento_id: {"canal": canal, "mensagem_id": id}}
+# Dicionário para armazenar mensagens de carrinho
+carrinhos_ativos = {}  # {pagamento_id: {"canal": canal, "mensagem_id": id, "usuario": user_id}}
 
 # ===============================
 # MERCADO PAGO
@@ -86,12 +86,11 @@ def criar_pagamento_pix(user_id, produto="cs"):
     return None
 
 # ===============================
-# FUNÇÃO PARA LOG DE CARRINHOS (AGORA RETORNA A MENSAGEM)
+# FUNÇÃO PARA LOG DE CARRINHOS
 # ===============================
 async def log_carrinho_ativo(user, produto_nome, valor, pagamento_id):
     """
     Envia uma mensagem no canal de carrinhos ativos
-    e retorna a mensagem enviada para referência futura
     """
     try:
         canal = bot.get_channel(CANAL_CARRINHOS)
@@ -113,7 +112,7 @@ async def log_carrinho_ativo(user, produto_nome, valor, pagamento_id):
         embed.set_footer(text="⏳ Aguardando pagamento...")
         
         mensagem = await canal.send(embed=embed)
-        print(f"✅ Log enviado para canal de carrinhos")
+        print(f"✅ Log enviado para canal de carrinhos - Pagamento: {pagamento_id}")
         
         # Armazenar a mensagem para remover depois
         carrinhos_ativos[str(pagamento_id)] = {
@@ -146,8 +145,8 @@ async def log_pagamento_confirmado(user, produto_nome, valor, pagamento_id):
                     mensagem = await canal_carrinho.fetch_message(dados_carrinho["mensagem_id"])
                     await mensagem.delete()
                     print(f"✅ Mensagem do carrinho removida (Pagamento: {pagamento_id})")
-                except:
-                    print(f"⚠️ Mensagem do carrinho já não existe")
+                except Exception as e:
+                    print(f"⚠️ Mensagem do carrinho já não existe: {e}")
             
             # Remover do dicionário
             del carrinhos_ativos[str(pagamento_id)]
@@ -172,7 +171,7 @@ async def log_pagamento_confirmado(user, produto_nome, valor, pagamento_id):
         embed.set_footer(text="🎉 Produto entregue com sucesso!")
         
         await canal_pagos.send(embed=embed)
-        print(f"✅ Log de pagamento enviado para canal de pagos")
+        print(f"✅ Log de pagamento enviado para canal de pagos - Pagamento: {pagamento_id}")
         
     except Exception as e:
         print(f"❌ Erro ao processar pagamento: {e}")
@@ -312,85 +311,139 @@ async def comprar_rockstar(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=view)
 
 # ===============================
-# WEBHOOK E ENTREGAS
+# WEBHOOK E ENTREGAS - CORRIGIDO
 # ===============================
 app = Flask(__name__)
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.json
-    print("📩 webhook:", data)
+    print("📩 webhook recebido:", data)
     
     try:
         if "data" in data and "id" in data["data"]:
             payment_id = data["data"]["id"]
-            payment = sdk.payment().get(payment_id)["response"]
             
-            if payment["status"] == "approved":
-                ref = payment["external_reference"]
-                partes = ref.split('_')
-                produto = partes[0]
-                user_id = int(partes[1])
+            # Buscar detalhes do pagamento
+            payment_response = sdk.payment().get(payment_id)
+            
+            if payment_response["status"] == 200:
+                payment = payment_response["response"]
                 
-                print(f"✅ Pagamento aprovado! Produto: {produto}")
-                
-                # Buscar dados do produto
-                produtos = {
-                    "cs": {"nome": "Pack Counter Strike", "preco": 24.99},
-                    "rockstar": {"nome": "Conta Rockstar", "preco": 4.99}
-                }
-                produto_info = produtos.get(produto, produtos["cs"])
-                
-                # Buscar usuário
-                user = bot.get_user(user_id)
-                
-                if user:
-                    # ===== REMOVER DO CARRINHO E LOGAR NO CANAL DE PAGOS =====
-                    asyncio.run_coroutine_threadsafe(
-                        log_pagamento_confirmado(
-                            user=user,
-                            produto_nome=produto_info["nome"],
-                            valor=produto_info["preco"],
-                            pagamento_id=payment_id
-                        ),
-                        bot.loop
-                    )
-                
-                # Entregar o produto
-                if produto == "cs":
-                    asyncio.run_coroutine_threadsafe(enviar_produto(user_id), bot.loop)
-                elif produto == "rockstar":
-                    asyncio.run_coroutine_threadsafe(enviar_produto_manual(user_id), bot.loop)
+                if payment["status"] == "approved":
+                    # Extrair external_reference
+                    ref = payment.get("external_reference", "")
+                    print(f"📌 external_reference: {ref}")
+                    
+                    if ref:
+                        partes = ref.split('_')
+                        if len(partes) >= 2:
+                            produto = partes[0]  # cs ou rockstar
+                            try:
+                                user_id = int(partes[1])  # ID do usuário que comprou
+                                print(f"✅ Pagamento aprovado! Produto: {produto}, User ID: {user_id}")
+                                
+                                # Buscar dados do produto
+                                produtos = {
+                                    "cs": {"nome": "Pack Counter Strike", "preco": 24.99},
+                                    "rockstar": {"nome": "Conta Rockstar", "preco": 4.99}
+                                }
+                                produto_info = produtos.get(produto, produtos["cs"])
+                                
+                                # ===== CHAMAR A ENTREGA DO PRODUTO =====
+                                if produto == "cs":
+                                    asyncio.run_coroutine_threadsafe(
+                                        entregar_produto_cs(user_id, payment_id, produto_info),
+                                        bot.loop
+                                    )
+                                elif produto == "rockstar":
+                                    asyncio.run_coroutine_threadsafe(
+                                        entregar_produto_rockstar(user_id, payment_id, produto_info),
+                                        bot.loop
+                                    )
+                            except ValueError:
+                                print(f"❌ Erro ao converter user_id: {partes[1]}")
     except Exception as e:
         print("❌ Erro webhook:", e)
+        import traceback
+        traceback.print_exc()
     
     return "OK", 200
 
-async def enviar_produto(user_id):
-    user = await bot.fetch_user(user_id)
-    await user.send(
-        "✅ **Pagamento confirmado!**\nAqui está seu produto:",
-        file=discord.File(ARQUIVO_PRODUTO)
-    )
-    
-    guild = bot.get_guild(GUILD_ID)
-    member = guild.get_member(user_id)
-    if member:
-        await member.remove_roles(guild.get_role(CARGO_MEMBRO))
-        await member.add_roles(guild.get_role(CARGO_CLIENTE))
-    print("📦 Produto CS entregue")
+# Função para entregar produto CS (automático)
+async def entregar_produto_cs(user_id, pagamento_id, produto_info):
+    try:
+        # Buscar usuário pelo ID (FORÇA buscar na API do Discord)
+        user = await bot.fetch_user(user_id)
+        
+        if not user:
+            print(f"❌ Usuário {user_id} não encontrado no Discord")
+            return
+        
+        print(f"✅ Entregando produto para: {user.name} (ID: {user.id})")
+        
+        # Enviar produto no privado do cliente
+        await user.send(
+            "✅ **Pagamento confirmado!**\nAqui está seu produto:",
+            file=discord.File(ARQUIVO_PRODUTO)
+        )
+        
+        # Log no canal de pagos
+        await log_pagamento_confirmado(
+            user=user,
+            produto_nome=produto_info["nome"],
+            valor=produto_info["preco"],
+            pagamento_id=pagamento_id
+        )
+        
+        # Adicionar cargo de cliente
+        guild = bot.get_guild(GUILD_ID)
+        if guild:
+            member = guild.get_member(user_id)
+            if member:
+                await member.remove_roles(guild.get_role(CARGO_MEMBRO))
+                await member.add_roles(guild.get_role(CARGO_CLIENTE))
+        
+        print(f"📦 Produto CS entregue com sucesso para {user.name}")
+        
+    except Exception as e:
+        print(f"❌ Erro ao entregar produto CS: {e}")
 
-async def enviar_produto_manual(user_id):
-    user = await bot.fetch_user(user_id)
-    await user.send(
-        "✅ **Pagamento aprovado!**\n📦 Sua Conta Rockstar será entregue em breve por um administrador."
-    )
-    print("📨 Aviso manual enviado")
+# Função para entregar produto Rockstar (manual)
+async def entregar_produto_rockstar(user_id, pagamento_id, produto_info):
+    try:
+        # Buscar usuário pelo ID
+        user = await bot.fetch_user(user_id)
+        
+        if not user:
+            print(f"❌ Usuário {user_id} não encontrado no Discord")
+            return
+        
+        print(f"✅ Processando compra manual para: {user.name} (ID: {user.id})")
+        
+        # Avisar que a entrega será manual
+        await user.send(
+            "✅ **Pagamento aprovado!**\n📦 Sua Conta Rockstar será entregue em breve por um administrador."
+        )
+        
+        # Log no canal de pagos
+        await log_pagamento_confirmado(
+            user=user,
+            produto_nome=produto_info["nome"],
+            valor=produto_info["preco"],
+            pagamento_id=pagamento_id
+        )
+        
+        print(f"📨 Aviso manual enviado para {user.name}")
+        
+    except Exception as e:
+        print(f"❌ Erro ao processar compra manual: {e}")
 
 # ===============================
 # START
 # ===============================
 def iniciar_flask():
+    print("🌐 Flask online na porta 10000")
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
 
 def start_all():
