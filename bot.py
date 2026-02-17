@@ -95,34 +95,65 @@ class Bot(discord.Client):
 
     async def on_ready(self):
         print(f"🟢 Logado como {self.user}")
+        
+        # ===== POSTAR PRODUTOS NO CANAL AO INICIAR =====
+        channel = bot.get_channel(1472114509068898367)  # ID do seu canal
+        
+        # Apagar mensagens antigas (opcional)
+        async for message in channel.history(limit=50):
+            if message.author == bot.user:
+                await message.delete()
+        
+        # Postar produto CS
+        embed_cs = discord.Embed(
+            title="🔥 **Cheat Counter Strike**",
+            description="✅ Acesso completo\n✅ Arquivos exclusivos\n✅ Suporte VIP\n✅ Entrega Automática",
+            color=0x00ff88
+        )
+        embed_cs.add_field(name="💰 **Preço**", value="R$ 24,99", inline=False)
+        embed_cs.set_image(url="https://i.imgur.com/EuTrxjn.png")  # SUA ARTE
+        embed_cs.set_footer(text="Clique no botão abaixo para comprar via PIX")
+        
+        view_cs = BotaoComprar(produto="cs")
+        await channel.send(embed=embed_cs, view=view_cs)
+        
+        # Postar produto Rockstar
+        embed_rock = discord.Embed(
+            title="🎮 **Conta Rockstar**",
+            description="✅ Conta pronta\n✅ Entrega Automática\n✅ Garantia",
+            color=0x3498db
+        )
+        embed_rock.add_field(name="💰 **Preço**", value="R$ 4,99", inline=False)
+        embed_rock.set_image(url="https://i.imgur.com/ppmITej.png")  # SUA ARTE
+        embed_rock.set_footer(text="Clique no botão abaixo para comprar via PIX")
+        
+        view_rock = BotaoComprar(produto="rockstar")
+        await channel.send(embed=embed_rock, view=view_rock)
+        
+        print("✅ Produtos postados no canal")
 
 bot = Bot()
 
 # ===============================
-# CLASSE DO BOTÃO - ENVIA TUDO NO PRIVADO
+# CLASSE DO BOTÃO - ENVIA PAGAMENTO NO PRIVADO
 # ===============================
 class BotaoComprar(discord.ui.View):
-    def __init__(self, produto: str, user_id: int):
-        super().__init__(timeout=300)
+    def __init__(self, produto: str):
+        super().__init__(timeout=None)  # Sem timeout para ficar sempre ativo
         self.produto = produto
-        self.user_id = user_id
     
     @discord.ui.button(label="🛒 Comprar Agora", style=discord.ButtonStyle.green, emoji="💳")
     async def botao_comprar(self, interaction: discord.Interaction, button: discord.ui.Button):
         
-        # AVISAR QUE VAI PRO PRIVADO
-        await interaction.response.send_message("📨 **Enviando informações no seu privado...**", ephemeral=True)
+        # AVISAR QUE VAI PRO PRIVADO (só quem clicou vê)
+        await interaction.response.send_message("📨 **Enviando pagamento no seu privado...**", ephemeral=True)
         
-        # Desabilitar botão (opcional)
-        button.disabled = True
-        await interaction.edit_original_response(view=self)
-        
-        # Buscar usuário para DM
+        # Pegar usuário
         user = interaction.user
         
         try:
             # Gerar PIX
-            pix_data = criar_pagamento_pix(self.user_id, self.produto)
+            pix_data = criar_pagamento_pix(user.id, self.produto)
             
             if not pix_data:
                 await user.send("❌ **Erro ao gerar pagamento.** Tente novamente mais tarde.")
@@ -173,47 +204,44 @@ class BotaoComprar(discord.ui.View):
                 await user.send(embed=embed_pix, file=file)
                 
         except discord.Forbidden:
-            # Se o usuário bloqueou DM
-            await interaction.followup.send("❌ **Não consegui te enviar mensagem no privado!**\nVerifique se você permite DMs de membros do servidor.", ephemeral=True)
+            await interaction.followup.send("❌ **Não consigo te enviar mensagem no privado!**\nHabilite DMs de membros do servidor.", ephemeral=True)
         except Exception as e:
             print(f"❌ Erro: {e}")
-            await user.send("❌ **Ocorreu um erro inesperado.** Contate um administrador.")
+            await user.send("❌ **Ocorreu um erro.** Contate um administrador.")
 
 # ===============================
-# COMANDOS - SÓ MOSTRAM O PRODUTO
+# COMANDO MANUAL (CASO PRECISE)
 # ===============================
 @bot.tree.command(name="comprar", description="Comprar Pack Counter Strike")
 async def comprar(interaction: discord.Interaction):
-    
     embed = discord.Embed(
         title="🔥 **Cheat Counter Strike**",
         description="✅ Acesso completo\n✅ Arquivos exclusivos\n✅ Suporte VIP\n✅ Entrega Automática",
         color=0x00ff88
     )
     embed.add_field(name="💰 **Preço**", value="R$ 24,99", inline=False)
-    embed.set_image(url="https://i.imgur.com/EuTrxjn.png")  # SUA ARTE AQUI
-    embed.set_footer(text="Legend Store — Clique no botão para pagar via PIX")
+    embed.set_image(url="https://i.imgur.com/EuTrxjn.png")
+    embed.set_footer(text="Clique no botão abaixo para comprar via PIX")
     
-    view = BotaoComprar(produto="cs", user_id=interaction.user.id)
+    view = BotaoComprar(produto="cs")
     await interaction.response.send_message(embed=embed, view=view)
 
 @bot.tree.command(name="comprar_rockstar", description="Comprar Conta Rockstar")
 async def comprar_rockstar(interaction: discord.Interaction):
-    
     embed = discord.Embed(
         title="🎮 **Conta Rockstar**",
         description="✅ Conta pronta\n✅ Entrega Automática\n✅ Garantia",
         color=0x3498db
     )
     embed.add_field(name="💰 **Preço**", value="R$ 4,99", inline=False)
-    embed.set_image(url="https://i.imgur.com/ppmITej.png")  # SUA ARTE AQUI
-    embed.set_footer(text="Legend Store — Clique no botão para pagar via PIX")
+    embed.set_image(url="https://i.imgur.com/ppmITej.png")
+    embed.set_footer(text="Clique no botão abaixo para comprar via PIX")
     
-    view = BotaoComprar(produto="rockstar", user_id=interaction.user.id)
+    view = BotaoComprar(produto="rockstar")
     await interaction.response.send_message(embed=embed, view=view)
 
 # ===============================
-# WEBHOOK E ENTREGAS (IGUAL)
+# WEBHOOK E ENTREGAS
 # ===============================
 app = Flask(__name__)
 
@@ -221,7 +249,27 @@ app = Flask(__name__)
 def webhook():
     data = request.json
     print("📩 webhook:", data)
-    # ... (seu código de webhook existente)
+    
+    try:
+        if "data" in data and "id" in data["data"]:
+            payment_id = data["data"]["id"]
+            payment = sdk.payment().get(payment_id)["response"]
+            
+            if payment["status"] == "approved":
+                ref = payment["external_reference"]
+                partes = ref.split('_')
+                produto = partes[0]
+                user_id = int(partes[1])
+                
+                print(f"✅ Pagamento aprovado! Produto: {produto}")
+                
+                if produto == "cs":
+                    asyncio.run_coroutine_threadsafe(enviar_produto(user_id), bot.loop)
+                elif produto == "rockstar":
+                    asyncio.run_coroutine_threadsafe(enviar_produto_manual(user_id), bot.loop)
+    except Exception as e:
+        print("❌ Erro webhook:", e)
+    
     return "OK", 200
 
 async def enviar_produto(user_id):
@@ -230,7 +278,13 @@ async def enviar_produto(user_id):
         "✅ **Pagamento confirmado!**\nAqui está seu produto:",
         file=discord.File(ARQUIVO_PRODUTO)
     )
-    print("📦 Produto entregue")
+    
+    guild = bot.get_guild(GUILD_ID)
+    member = guild.get_member(user_id)
+    if member:
+        await member.remove_roles(guild.get_role(CARGO_MEMBRO))
+        await member.add_roles(guild.get_role(CARGO_CLIENTE))
+    print("📦 Produto CS entregue")
 
 async def enviar_produto_manual(user_id):
     user = await bot.fetch_user(user_id)
