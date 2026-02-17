@@ -311,69 +311,12 @@ async def comprar_rockstar(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=view)
 
 # ===============================
-# WEBHOOK E ENTREGAS - CORRIGIDO
+# FUNÇÕES DE ENTREGA (DEFINIDAS ANTES DO WEBHOOK)
 # ===============================
-app = Flask(__name__)
 
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    data = request.json
-    print("📩 webhook recebido:", data)
-    
-    try:
-        if "data" in data and "id" in data["data"]:
-            payment_id = data["data"]["id"]
-            
-            # Buscar detalhes do pagamento
-            payment_response = sdk.payment().get(payment_id)
-            
-            if payment_response["status"] == 200:
-                payment = payment_response["response"]
-                
-                if payment["status"] == "approved":
-                    # Extrair external_reference
-                    ref = payment.get("external_reference", "")
-                    print(f"📌 external_reference: {ref}")
-                    
-                    if ref:
-                        partes = ref.split('_')
-                        if len(partes) >= 2:
-                            produto = partes[0]  # cs ou rockstar
-                            try:
-                                user_id = int(partes[1])  # ID do usuário que comprou
-                                print(f"✅ Pagamento aprovado! Produto: {produto}, User ID: {user_id}")
-                                
-                                # Buscar dados do produto
-                                produtos = {
-                                    "cs": {"nome": "Pack Counter Strike", "preco": 24.99},
-                                    "rockstar": {"nome": "Conta Rockstar", "preco": 4.99}
-                                }
-                                produto_info = produtos.get(produto, produtos["cs"])
-                                
-                                # ===== CHAMAR A ENTREGA DO PRODUTO =====
-                                if produto == "cs":
-                                    asyncio.run_coroutine_threadsafe(
-                                        entregar_produto_cs(user_id, payment_id, produto_info),
-                                        bot.loop
-                                    )
-                                elif produto == "rockstar":
-                                    asyncio.run_coroutine_threadsafe(
-                                        entregar_produto_rockstar(user_id, payment_id, produto_info),
-                                        bot.loop
-                                    )
-                            except ValueError:
-                                print(f"❌ Erro ao converter user_id: {partes[1]}")
-    except Exception as e:
-        print("❌ Erro webhook:", e)
-        import traceback
-        traceback.print_exc()
-    
-    return "OK", 200
-
-# Função para entregar produto CS (automático)
 async def entregar_produto_cs(user_id, pagamento_id, produto_info):
     try:
-        # Buscar usuário pelo ID (FORÇA buscar na API do Discord)
+        # Buscar usuário pelo ID
         user = await bot.fetch_user(user_id)
         
         if not user:
@@ -406,10 +349,17 @@ async def entregar_produto_cs(user_id, pagamento_id, produto_info):
         
         print(f"📦 Produto CS entregue com sucesso para {user.name}")
         
+    except discord.Forbidden:
+        print(f"❌ DM fechada para {user.name}")
+        # Notificar no canal de logs
+        canal_pagos = bot.get_channel(CANAL_PAGOS)
+        if canal_pagos:
+            await canal_pagos.send(f"⚠️ **ATENÇÃO:** Não consegui enviar o produto para {user.mention}! DM fechada.")
     except Exception as e:
         print(f"❌ Erro ao entregar produto CS: {e}")
+        import traceback
+        traceback.print_exc()
 
-# Função para entregar produto Rockstar (manual)
 async def entregar_produto_rockstar(user_id, pagamento_id, produto_info):
     try:
         # Buscar usuário pelo ID
@@ -436,8 +386,77 @@ async def entregar_produto_rockstar(user_id, pagamento_id, produto_info):
         
         print(f"📨 Aviso manual enviado para {user.name}")
         
+    except discord.Forbidden:
+        print(f"❌ DM fechada para {user.name}")
+        canal_pagos = bot.get_channel(CANAL_PAGOS)
+        if canal_pagos:
+            await canal_pagos.send(f"⚠️ **ATENÇÃO:** Não consegui avisar {user.mention} sobre a compra! DM fechada.")
     except Exception as e:
         print(f"❌ Erro ao processar compra manual: {e}")
+        import traceback
+        traceback.print_exc()
+
+# ===============================
+# WEBHOOK (AGORA AS FUNÇÕES JÁ EXISTEM)
+# ===============================
+app = Flask(__name__)
+
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    data = request.json
+    print("📩 webhook recebido:", data)
+    
+    try:
+        if "data" in data and "id" in data["data"]:
+            payment_id = data["data"]["id"]
+            
+            # Buscar detalhes do pagamento
+            payment_response = sdk.payment().get(payment_id)
+            
+            if payment_response["status"] == 200:
+                payment = payment_response["response"]
+                
+                if payment["status"] == "approved":
+                    # Extrair external_reference
+                    ref = payment.get("external_reference", "")
+                    print(f"📌 external_reference: {ref}")
+                    
+                    if ref:
+                        partes = ref.split('_')
+                        if len(partes) >= 2:
+                            produto = partes[0]
+                            try:
+                                user_id = int(partes[1])
+                                print(f"✅ Pagamento aprovado! Produto: {produto}, User ID: {user_id}")
+                                
+                                # Buscar dados do produto
+                                produtos = {
+                                    "cs": {"nome": "Pack Counter Strike", "preco": 24.99},
+                                    "rockstar": {"nome": "Conta Rockstar", "preco": 4.99}
+                                }
+                                produto_info = produtos.get(produto, produtos["cs"])
+                                
+                                # ===== CHAMAR A ENTREGA DO PRODUTO =====
+                                if produto == "cs":
+                                    print("🔍 Chamando entregar_produto_cs...")
+                                    asyncio.run_coroutine_threadsafe(
+                                        entregar_produto_cs(user_id, payment_id, produto_info),
+                                        bot.loop
+                                    )
+                                elif produto == "rockstar":
+                                    print("🔍 Chamando entregar_produto_rockstar...")
+                                    asyncio.run_coroutine_threadsafe(
+                                        entregar_produto_rockstar(user_id, payment_id, produto_info),
+                                        bot.loop
+                                    )
+                            except ValueError:
+                                print(f"❌ Erro ao converter user_id: {partes[1]}")
+    except Exception as e:
+        print("❌ Erro webhook:", e)
+        import traceback
+        traceback.print_exc()
+    
+    return "OK", 200
 
 # ===============================
 # START
