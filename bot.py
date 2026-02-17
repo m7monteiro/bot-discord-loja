@@ -259,7 +259,7 @@ class CopiarPIXView(discord.ui.View):
         )
 
 # ===============================
-# CLASSE DO BOTÃO DE COMPRA - CORRIGIDA (SEM ERRO DE INTERAÇÃO)
+# CLASSE DO BOTÃO DE COMPRA
 # ===============================
 class BotaoComprar(discord.ui.View):
     def __init__(self, produto: str, user_id: int):
@@ -270,24 +270,20 @@ class BotaoComprar(discord.ui.View):
     @discord.ui.button(label="🛒 Comprar Agora", style=discord.ButtonStyle.green, emoji="💳")
     async def botao_comprar(self, interaction: discord.Interaction, button: discord.ui.Button):
         
-        # 🔥 RESPOSTA IMEDIATA - ANTES DE QUALQUER PROCESSAMENTO
         await interaction.response.defer(ephemeral=True)
         
-        # Desabilitar o botão para não clicarem de novo
         button.disabled = True
         await interaction.edit_original_response(view=self)
         
         user = interaction.user
         
         try:
-            # Gerar PIX (isso pode demorar)
             pix_data = criar_pagamento_pix(self.user_id, self.produto)
             
             if not pix_data:
                 await user.send("❌ **Erro ao gerar pagamento.** Tente novamente mais tarde.")
                 return
             
-            # Log no canal de carrinhos
             await log_carrinho_ativo(
                 user=user,
                 produto_nome=pix_data['produto'],
@@ -295,7 +291,6 @@ class BotaoComprar(discord.ui.View):
                 pagamento_id=pix_data.get('payment_id', 'N/A')
             )
             
-            # Embed do PIX
             embed_pix = discord.Embed(
                 title="🧾 **PAGAMENTO PIX**",
                 description=f"**Produto:** {pix_data['produto']}\n**Valor:** R$ {pix_data['preco']:.2f}",
@@ -327,7 +322,7 @@ class BotaoComprar(discord.ui.View):
             await user.send("❌ **Ocorreu um erro inesperado.** Contate um administrador.")
 
 # ===============================
-# COMANDO DE ENTREGA MANUAL (SÓ PARA ADMINS)
+# COMANDO DE ENTREGA MANUAL
 # ===============================
 @bot.tree.command(name="entregar", description="[ADMIN] Envia a conta Rockstar para o cliente")
 @app_commands.describe(
@@ -339,7 +334,6 @@ async def entregar_conta(
     usuario: str, 
     conta: str
 ):
-    # Verificar se é admin
     is_admin = False
     if interaction.user.id == MEU_ID:
         is_admin = True
@@ -374,7 +368,6 @@ async def entregar_conta(
             f"```{conta}```"
         )
         
-        # Log no canal de pagamentos
         canal_pagos = bot.get_channel(CANAL_PAGOS)
         if canal_pagos:
             embed = discord.Embed(
@@ -396,7 +389,7 @@ async def entregar_conta(
         print(f"❌ Erro no comando entregar: {e}")
 
 # ===============================
-# COMANDOS (OPCIONAIS - PARA REPOSTAR MANUALMENTE)
+# COMANDO REPOSTAR
 # ===============================
 @bot.tree.command(name="repostar", description="[ADMIN] Reposta os produtos nos canais")
 async def repostar(interaction: discord.Interaction):
@@ -409,75 +402,123 @@ async def repostar(interaction: discord.Interaction):
     await interaction.followup.send("✅ Produtos republicados com sucesso!")
 
 # ===============================
-# WEBHOOK CORRIGIDO
+# WEBHOOK COM DEBUG TOTAL
 # ===============================
 app = Flask(__name__)
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
+    print("\n" + "="*60)
+    print("🔥🔥🔥 WEBHOOK ACIONADO 🔥🔥🔥")
+    print("="*60)
+    
+    print(f"Método: {request.method}")
+    print(f"URL: {request.url}")
+    print(f"Headers: {dict(request.headers)}")
+    
     data = request.json
-    print("\n" + "🔥"*50)
-    print("🔥 WEBHOOK RECEBIDO:")
+    print("Body recebido:")
     print(data)
-    print("🔥"*50)
+    print("="*60)
     
     try:
         payment_id = None
-        if data and "data" in data and "id" in data["data"]:
+        
+        if request.args.get('data.id'):
+            payment_id = request.args.get('data.id')
+            print(f"✅ payment_id via query string: {payment_id}")
+        
+        if not payment_id and request.args.get('id'):
+            payment_id = request.args.get('id')
+            print(f"✅ payment_id via query string (id): {payment_id}")
+        
+        if not payment_id and data and "data" in data and "id" in data["data"]:
             payment_id = data["data"]["id"]
+            print(f"✅ payment_id via JSON data.id: {payment_id}")
+        
+        if not payment_id and data and "id" in data:
+            payment_id = data["id"]
+            print(f"✅ payment_id via JSON id: {payment_id}")
         
         if not payment_id:
-            print("❌ Sem payment_id")
+            print("❌ Não consegui extrair payment_id")
             return "OK", 200
         
-        print(f"✅ Payment ID: {payment_id}")
+        print(f"✅ Payment ID final: {payment_id}")
         
+        print(f"🔍 Buscando pagamento {payment_id} no Mercado Pago...")
         payment_response = sdk.payment().get(payment_id)
+        print(f"🔍 Resposta do MP: {payment_response}")
         
         if payment_response["status"] != 200:
+            print(f"❌ Erro na resposta do MP: {payment_response}")
             return "OK", 200
         
         payment = payment_response["response"]
+        print(f"✅ Pagamento encontrado!")
+        print(f"   Status: {payment['status']}")
+        print(f"   External reference: {payment.get('external_reference')}")
+        print(f"   Valor: {payment.get('transaction_amount')}")
         
         if payment["status"] != "approved":
+            print(f"⏳ Pagamento não aprovado: {payment['status']}")
             return "OK", 200
         
         ref = payment.get("external_reference", "")
+        print(f"✅ external_reference: {ref}")
+        
         if not ref:
+            print("❌ external_reference vazia!")
             return "OK", 200
         
         partes = ref.split('_')
+        print(f"🔍 Partes da referência: {partes}")
+        
         if len(partes) < 2:
+            print(f"❌ Formato inválido: {ref}")
             return "OK", 200
         
         produto = partes[0]
-        user_id = int(partes[1])
-        
-        print(f"✅ Produto: {produto}, User: {user_id}")
-        
-        if user_id == MEU_ID:
-            print("❌ Bloqguei entrega para o dono")
+        try:
+            user_id = int(partes[1])
+        except ValueError:
+            print(f"❌ Erro ao converter user_id: {partes[1]}")
             return "OK", 200
         
+        print(f"✅ PRODUTO: {produto}")
+        print(f"✅ USER_ID: {user_id}")
+        
+        if user_id == MEU_ID:
+            print("❌ USER_ID É DO DONO! BLOQUEANDO ENTREGA.")
+            return "OK", 200
+        
+        print(f"🔍 Buscando usuário {user_id}...")
         user = bot.get_user(user_id)
         if not user:
+            print(f"⚠️ Usuário não encontrado no cache, tentando fetch...")
             future = asyncio.run_coroutine_threadsafe(
                 bot.fetch_user(user_id), bot.loop
             )
             try:
                 user = future.result(timeout=5)
-            except:
-                print(f"❌ Não achei usuário {user_id}")
+                print(f"✅ Usuário encontrado via fetch: {user.name}")
+            except Exception as e:
+                print(f"❌ Erro no fetch: {e}")
                 return "OK", 200
         
         if not user:
+            print(f"❌ Usuário não existe")
             return "OK", 200
+        
+        print(f"✅ Usuário encontrado: {user.name}")
         
         produtos = {
             "cs": {"nome": "Pack Counter Strike", "preco": 24.99},
             "rockstar": {"nome": "Conta Rockstar", "preco": 4.99}
         }
         produto_info = produtos.get(produto, produtos["cs"])
+        
+        print(f"📦 Entregando produto {produto} para {user.name}...")
         
         if produto == "cs":
             future = asyncio.run_coroutine_threadsafe(
@@ -515,8 +556,10 @@ def webhook():
             embed.set_footer(text="🎉 Pagamento confirmado!")
             
             asyncio.run_coroutine_threadsafe(canal_pagos.send(embed=embed), bot.loop)
+            print(f"✅ Log enviado para canal de pagos")
         
         if str(payment_id) in carrinhos_ativos:
+            print(f"🗑️ Removendo carrinho {payment_id}...")
             dados = carrinhos_ativos[str(payment_id)]
             canal_carrinho = bot.get_channel(dados["canal"])
             if canal_carrinho:
@@ -526,8 +569,9 @@ def webhook():
                     )
                     msg = future_msg.result(timeout=5)
                     asyncio.run_coroutine_threadsafe(msg.delete(), bot.loop)
-                except:
-                    pass
+                    print(f"✅ Carrinho removido")
+                except Exception as e:
+                    print(f"⚠️ Erro ao remover carrinho: {e}")
             del carrinhos_ativos[str(payment_id)]
         
         guild = bot.get_guild(GUILD_ID)
@@ -540,10 +584,16 @@ def webhook():
                 asyncio.run_coroutine_threadsafe(
                     member.add_roles(guild.get_role(CARGO_CLIENTE)), bot.loop
                 )
+                print(f"✅ Cargos atualizados para {user.name}")
         
     except Exception as e:
-        print(f"❌ ERRO: {e}")
+        print(f"❌ ERRO CRÍTICO: {e}")
+        import traceback
+        traceback.print_exc()
     
+    print("="*60)
+    print("✅ Webhook finalizado")
+    print("="*60)
     return "OK", 200
 
 # ===============================
