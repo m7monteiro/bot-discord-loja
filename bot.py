@@ -37,6 +37,9 @@ CARGO_CLIENTE = 1472666841515032676
 CANAL_CARRINHOS = 1473180070851117108  # Canal #carrinhos-ativos
 CANAL_PAGOS = 1473182832225554554      # Canal #pagamentos-confirmados
 
+# 🔴 SEU ID DO DISCORD
+MEU_ID = 1439411460378726530
+
 # Dicionário para armazenar mensagens de carrinho
 carrinhos_ativos = {}  # {pagamento_id: {"canal": canal, "mensagem_id": id, "usuario": user_id}}
 
@@ -311,7 +314,7 @@ async def comprar_rockstar(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=view)
 
 # ===============================
-# FUNÇÕES DE ENTREGA (DEFINIDAS ANTES DO WEBHOOK)
+# FUNÇÕES DE ENTREGA
 # ===============================
 
 async def entregar_produto_cs(user_id, pagamento_id, produto_info):
@@ -323,6 +326,12 @@ async def entregar_produto_cs(user_id, pagamento_id, produto_info):
             print(f"❌ Usuário {user_id} não encontrado no Discord")
             return
         
+        # 🔴 VERIFICAÇÃO SE É O DONO
+        if user_id == MEU_ID:
+            print(f"❌❌❌ ALERTA: Produto sendo enviado para o dono (ID: {user_id})")
+            print(f"❌❌❌ Isso indica que o user_id do cliente não está sendo passado corretamente!")
+            return
+        
         print(f"✅ Entregando produto para: {user.name} (ID: {user.id})")
         
         # Enviar produto no privado do cliente
@@ -330,6 +339,7 @@ async def entregar_produto_cs(user_id, pagamento_id, produto_info):
             "✅ **Pagamento confirmado!**\nAqui está seu produto:",
             file=discord.File(ARQUIVO_PRODUTO)
         )
+        print(f"✅ PRODUTO ENVIADO para {user.name}")
         
         # Log no canal de pagos
         await log_pagamento_confirmado(
@@ -350,11 +360,10 @@ async def entregar_produto_cs(user_id, pagamento_id, produto_info):
         print(f"📦 Produto CS entregue com sucesso para {user.name}")
         
     except discord.Forbidden:
-        print(f"❌ DM fechada para {user.name}")
-        # Notificar no canal de logs
+        print(f"❌ DM fechada para o usuário {user_id}")
         canal_pagos = bot.get_channel(CANAL_PAGOS)
         if canal_pagos:
-            await canal_pagos.send(f"⚠️ **ATENÇÃO:** Não consegui enviar o produto para {user.mention}! DM fechada.")
+            await canal_pagos.send(f"⚠️ **ATENÇÃO:** Não consegui enviar o produto para <@{user_id}>! DM fechada.")
     except Exception as e:
         print(f"❌ Erro ao entregar produto CS: {e}")
         import traceback
@@ -369,12 +378,18 @@ async def entregar_produto_rockstar(user_id, pagamento_id, produto_info):
             print(f"❌ Usuário {user_id} não encontrado no Discord")
             return
         
+        # 🔴 VERIFICAÇÃO SE É O DONO
+        if user_id == MEU_ID:
+            print(f"❌❌❌ ALERTA: Aviso sendo enviado para o dono (ID: {user_id})")
+            return
+        
         print(f"✅ Processando compra manual para: {user.name} (ID: {user.id})")
         
         # Avisar que a entrega será manual
         await user.send(
             "✅ **Pagamento aprovado!**\n📦 Sua Conta Rockstar será entregue em breve por um administrador."
         )
+        print(f"✅ AVISO MANUAL enviado para {user.name}")
         
         # Log no canal de pagos
         await log_pagamento_confirmado(
@@ -397,37 +412,54 @@ async def entregar_produto_rockstar(user_id, pagamento_id, produto_info):
         traceback.print_exc()
 
 # ===============================
-# WEBHOOK (AGORA AS FUNÇÕES JÁ EXISTEM)
+# WEBHOOK
 # ===============================
 app = Flask(__name__)
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.json
-    print("📩 webhook recebido:", data)
+    print("\n" + "="*60)
+    print("📩 WEBHOOK RECEBIDO:")
+    print(data)
+    print("="*60)
     
     try:
         if "data" in data and "id" in data["data"]:
             payment_id = data["data"]["id"]
+            print(f"🔍 Payment ID: {payment_id}")
             
             # Buscar detalhes do pagamento
+            print("🔍 Buscando detalhes no Mercado Pago...")
             payment_response = sdk.payment().get(payment_id)
+            print(f"🔍 Resposta do MP: {payment_response}")
             
             if payment_response["status"] == 200:
                 payment = payment_response["response"]
                 
+                print(f"🔍 Status do pagamento: {payment['status']}")
+                
                 if payment["status"] == "approved":
                     # Extrair external_reference
                     ref = payment.get("external_reference", "")
-                    print(f"📌 external_reference: {ref}")
+                    print(f"🔍 external_reference: {ref}")
                     
                     if ref:
                         partes = ref.split('_')
+                        print(f"🔍 Partes da referência: {partes}")
+                        
                         if len(partes) >= 2:
                             produto = partes[0]
                             try:
                                 user_id = int(partes[1])
-                                print(f"✅ Pagamento aprovado! Produto: {produto}, User ID: {user_id}")
+                                print(f"✅ PAGAMENTO APROVADO!")
+                                print(f"✅ PRODUTO: {produto}")
+                                print(f"✅ USER_ID: {user_id}")
+                                
+                                # 🔴 VERIFICAÇÃO CRÍTICA
+                                if user_id == MEU_ID:
+                                    print("❌❌❌ ERRO: O USER_ID É DO DONO!")
+                                    print("❌❌❌ O PRODUTO VAI PRA VOCÊ EM VEZ DO CLIENTE!")
                                 
                                 # Buscar dados do produto
                                 produtos = {
@@ -449,10 +481,18 @@ def webhook():
                                         entregar_produto_rockstar(user_id, payment_id, produto_info),
                                         bot.loop
                                     )
-                            except ValueError:
-                                print(f"❌ Erro ao converter user_id: {partes[1]}")
+                            except ValueError as e:
+                                print(f"❌ Erro ao converter user_id: {partes[1]} - {e}")
+                        else:
+                            print(f"❌ Formato inválido da external_reference: {ref}")
+                    else:
+                        print("❌ external_reference vazia!")
+                else:
+                    print(f"⏳ Pagamento não aprovado: {payment['status']}")
+            else:
+                print(f"❌ Erro na resposta do MP: {payment_response}")
     except Exception as e:
-        print("❌ Erro webhook:", e)
+        print("❌ ERRO CRÍTICO NO WEBHOOK:")
         import traceback
         traceback.print_exc()
     
