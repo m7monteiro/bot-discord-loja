@@ -37,9 +37,13 @@ CARGO_CLIENTE = 1472666841515032676
 CANAL_CARRINHOS = 1473180070851117108  # Canal #carrinhos-ativos
 CANAL_PAGOS = 1473182832225554554      # Canal #pagamentos-confirmados
 
+# IDs dos canais de produtos
+CANAL_CS = 1472315423793086667         # Canal do CS
+CANAL_ROCKSTAR = 1472681589627551785    # Canal da Rockstar
+
 # 🔴 SEU ID DO DISCORD
 MEU_ID = 1439411460378726530
-CARGO_ADMIN = 1472666559049633952  # ID do cargo de admin (use o mesmo do CARGO_MEMBRO ou crie um específico)
+CARGO_ADMIN = 1472666559049633952  # ID do cargo de admin
 
 # Dicionário para armazenar mensagens de carrinho
 carrinhos_ativos = {}  # {pagamento_id: {"canal": canal, "mensagem_id": id, "usuario": user_id}}
@@ -180,8 +184,62 @@ class Bot(discord.Client):
         await self.tree.sync()
         print("✅ Slash commands sincronizados")
 
+    async def publicar_produtos(self):
+        """Publica os produtos nos canais específicos"""
+        
+        # ===== PRODUTO CS =====
+        canal_cs = self.get_channel(CANAL_CS)
+        if canal_cs:
+            print(f"✅ Publicando CS no canal: {canal_cs.name}")
+            
+            # Apagar mensagens antigas do bot
+            async for mensagem in canal_cs.history(limit=20):
+                if mensagem.author == self.user:
+                    await mensagem.delete()
+            
+            embed_cs = discord.Embed(
+                title="🔥 **Cheat Counter Strike**",
+                description="✅ Acesso completo\n✅ Arquivos exclusivos\n✅ Suporte VIP\n✅ Entrega Automática",
+                color=0x00ff88
+            )
+            embed_cs.add_field(name="💰 **Preço**", value="R$ 24,99", inline=False)
+            embed_cs.set_image(url="https://i.imgur.com/EuTrxjn.png")
+            embed_cs.set_footer(text="Legend Store — Clique no botão para pagar via PIX")
+            
+            view_cs = BotaoComprar(produto="cs", user_id=0)
+            await canal_cs.send(embed=embed_cs, view=view_cs)
+            print(f"✅ CS publicado com sucesso!")
+        else:
+            print(f"❌ Canal CS não encontrado! ID: {CANAL_CS}")
+        
+        # ===== PRODUTO ROCKSTAR =====
+        canal_rock = self.get_channel(CANAL_ROCKSTAR)
+        if canal_rock:
+            print(f"✅ Publicando Rockstar no canal: {canal_rock.name}")
+            
+            # Apagar mensagens antigas do bot
+            async for mensagem in canal_rock.history(limit=20):
+                if mensagem.author == self.user:
+                    await mensagem.delete()
+            
+            embed_rock = discord.Embed(
+                title="🎮 **Conta Rockstar**",
+                description="✅ Conta pronta\n✅ Entrega manual via administrador\n✅ Garantia",
+                color=0x3498db
+            )
+            embed_rock.add_field(name="💰 **Preço**", value="R$ 4,99", inline=False)
+            embed_rock.set_image(url="https://i.imgur.com/ppmITej.png")
+            embed_rock.set_footer(text="Legend Store — Clique no botão para pagar via PIX")
+            
+            view_rock = BotaoComprar(produto="rockstar", user_id=0)
+            await canal_rock.send(embed=embed_rock, view=view_rock)
+            print(f"✅ Rockstar publicado com sucesso!")
+        else:
+            print(f"❌ Canal Rockstar não encontrado! ID: {CANAL_ROCKSTAR}")
+
     async def on_ready(self):
         print(f"🟢 Logado como {self.user}")
+        await self.publicar_produtos()
 
 bot = Bot()
 
@@ -276,7 +334,7 @@ async def entregar_conta(
     usuario: str, 
     conta: str
 ):
-    # Verificar se é admin (pelo cargo ou por ser o dono)
+    # Verificar se é admin
     is_admin = False
     if interaction.user.id == MEU_ID:
         is_admin = True
@@ -293,24 +351,19 @@ async def entregar_conta(
     await interaction.response.defer(ephemeral=True)
     
     try:
-        # Converter usuario para int (ID)
         user_id = int(usuario)
-        
-        # Buscar usuário
         user = await bot.fetch_user(user_id)
         
         if not user:
             await interaction.followup.send("❌ **Usuário não encontrado.**")
             return
         
-        # Enviar a conta na DM do cliente
         await user.send(
             "🎮 **Sua Conta Rockstar chegou!**\n\n"
             f"```{conta}```\n\n"
             "✅ Obrigado pela preferência!"
         )
         
-        # Avisar que entregou
         await interaction.followup.send(
             f"✅ **Conta entregue com sucesso para {user.name}!**\n"
             f"```{conta}```"
@@ -326,7 +379,7 @@ async def entregar_conta(
             )
             embed.add_field(name="👤 **Cliente**", value=user.mention, inline=True)
             embed.add_field(name="🆔 **ID**", value=user_id, inline=True)
-            embed.add_field(name="🔐 **Conta**", value=f"||{conta}||", inline=False)  # Spoiler
+            embed.add_field(name="🔐 **Conta**", value=f"||{conta}||", inline=False)
             embed.set_footer(text=f"Entregue por: {interaction.user.name}")
             
             await canal_pagos.send(embed=embed)
@@ -338,40 +391,20 @@ async def entregar_conta(
         print(f"❌ Erro no comando entregar: {e}")
 
 # ===============================
-# COMANDOS
+# COMANDOS (OPCIONAIS - PARA REPOSTAR MANUALMENTE)
 # ===============================
-@bot.tree.command(name="comprar", description="Comprar Pack Counter Strike")
-async def comprar(interaction: discord.Interaction):
+@bot.tree.command(name="repostar", description="[ADMIN] Reposta os produtos nos canais")
+async def repostar(interaction: discord.Interaction):
+    if interaction.user.id != MEU_ID:
+        await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
+        return
     
-    embed = discord.Embed(
-        title="🔥 **Cheat Counter Strike**",
-        description="✅ Acesso completo\n✅ Arquivos exclusivos\n✅ Suporte VIP\n✅ Entrega Automática",
-        color=0x00ff88
-    )
-    embed.add_field(name="💰 **Preço**", value="R$ 24,99", inline=False)
-    embed.set_image(url="https://i.imgur.com/EuTrxjn.png")
-    embed.set_footer(text="Legend Store — Clique no botão para pagar via PIX")
-    
-    view = BotaoComprar(produto="cs", user_id=interaction.user.id)
-    await interaction.response.send_message(embed=embed, view=view)
-
-@bot.tree.command(name="comprar_rockstar", description="Comprar Conta Rockstar")
-async def comprar_rockstar(interaction: discord.Interaction):
-    
-    embed = discord.Embed(
-        title="🎮 **Conta Rockstar**",
-        description="✅ Conta pronta\n✅ Entrega manual via administrador\n✅ Garantia",
-        color=0x3498db
-    )
-    embed.add_field(name="💰 **Preço**", value="R$ 4,99", inline=False)
-    embed.set_image(url="https://i.imgur.com/ppmITej.png")
-    embed.set_footer(text="Legend Store — Clique no botão para pagar via PIX")
-    
-    view = BotaoComprar(produto="rockstar", user_id=interaction.user.id)
-    await interaction.response.send_message(embed=embed, view=view)
+    await interaction.response.defer(ephemeral=True)
+    await bot.publicar_produtos()
+    await interaction.followup.send("✅ Produtos republicados com sucesso!")
 
 # ===============================
-# WEBHOOK CORRIGIDO - SEM AWAIT
+# WEBHOOK CORRIGIDO
 # ===============================
 app = Flask(__name__)
 
@@ -384,7 +417,6 @@ def webhook():
     print("🔥"*50)
     
     try:
-        # Extrair payment_id
         payment_id = None
         if data and "data" in data and "id" in data["data"]:
             payment_id = data["data"]["id"]
@@ -395,7 +427,6 @@ def webhook():
         
         print(f"✅ Payment ID: {payment_id}")
         
-        # Buscar pagamento
         payment_response = sdk.payment().get(payment_id)
         
         if payment_response["status"] != 200:
@@ -406,7 +437,6 @@ def webhook():
         if payment["status"] != "approved":
             return "OK", 200
         
-        # Extrair dados
         ref = payment.get("external_reference", "")
         if not ref:
             return "OK", 200
@@ -420,15 +450,12 @@ def webhook():
         
         print(f"✅ Produto: {produto}, User: {user_id}")
         
-        # NÃO ENTREGAR PARA O DONO
         if user_id == MEU_ID:
             print("❌ Bloqguei entrega para o dono")
             return "OK", 200
         
-        # Buscar usuário
         user = bot.get_user(user_id)
         if not user:
-            # Tentar fetch de forma segura
             future = asyncio.run_coroutine_threadsafe(
                 bot.fetch_user(user_id), bot.loop
             )
@@ -441,16 +468,13 @@ def webhook():
         if not user:
             return "OK", 200
         
-        # DEFINIR PRODUTO INFO
         produtos = {
             "cs": {"nome": "Pack Counter Strike", "preco": 24.99},
             "rockstar": {"nome": "Conta Rockstar", "preco": 4.99}
         }
         produto_info = produtos.get(produto, produtos["cs"])
         
-        # ===== ENTREGAR PRODUTO =====
         if produto == "cs":
-            # Entrega automática
             future = asyncio.run_coroutine_threadsafe(
                 user.send(
                     "✅ **Pagamento confirmado!**\nAqui está seu produto:",
@@ -461,7 +485,6 @@ def webhook():
             print(f"✅ Produto CS enviado para {user.name}")
             
         elif produto == "rockstar":
-            # Apenas aviso - entrega manual será feita pelo admin com /entregar
             future = asyncio.run_coroutine_threadsafe(
                 user.send(
                     "✅ **Pagamento aprovado!**\n📦 Sua Conta Rockstar será entregue em breve por um administrador.\n\n🔜 Você receberá a conta nesta mesma conversa assim que possível."
@@ -470,7 +493,6 @@ def webhook():
             future.result(timeout=10)
             print(f"✅ Aviso Rockstar enviado para {user.name}")
         
-        # ===== LOG NO CANAL DE PAGOS =====
         canal_pagos = bot.get_channel(CANAL_PAGOS)
         if canal_pagos:
             embed = discord.Embed(
@@ -489,7 +511,6 @@ def webhook():
             
             asyncio.run_coroutine_threadsafe(canal_pagos.send(embed=embed), bot.loop)
         
-        # ===== REMOVER DO CARRINHO =====
         if str(payment_id) in carrinhos_ativos:
             dados = carrinhos_ativos[str(payment_id)]
             canal_carrinho = bot.get_channel(dados["canal"])
@@ -504,7 +525,6 @@ def webhook():
                     pass
             del carrinhos_ativos[str(payment_id)]
         
-        # ===== ADICIONAR CARGO =====
         guild = bot.get_guild(GUILD_ID)
         if guild:
             member = guild.get_member(user_id)
