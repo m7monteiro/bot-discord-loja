@@ -259,7 +259,7 @@ class CopiarPIXView(discord.ui.View):
         )
 
 # ===============================
-# CLASSE DO BOTÃO DE COMPRA
+# CLASSE DO BOTÃO DE COMPRA - CORRIGIDA (SEM ERRO DE INTERAÇÃO)
 # ===============================
 class BotaoComprar(discord.ui.View):
     def __init__(self, produto: str, user_id: int):
@@ -270,20 +270,24 @@ class BotaoComprar(discord.ui.View):
     @discord.ui.button(label="🛒 Comprar Agora", style=discord.ButtonStyle.green, emoji="💳")
     async def botao_comprar(self, interaction: discord.Interaction, button: discord.ui.Button):
         
-        await interaction.response.send_message("📨 **Enviando informações no seu privado...**", ephemeral=True)
+        # 🔥 RESPOSTA IMEDIATA - ANTES DE QUALQUER PROCESSAMENTO
+        await interaction.response.defer(ephemeral=True)
         
+        # Desabilitar o botão para não clicarem de novo
         button.disabled = True
         await interaction.edit_original_response(view=self)
         
         user = interaction.user
         
         try:
+            # Gerar PIX (isso pode demorar)
             pix_data = criar_pagamento_pix(self.user_id, self.produto)
             
             if not pix_data:
                 await user.send("❌ **Erro ao gerar pagamento.** Tente novamente mais tarde.")
                 return
             
+            # Log no canal de carrinhos
             await log_carrinho_ativo(
                 user=user,
                 produto_nome=pix_data['produto'],
@@ -291,6 +295,7 @@ class BotaoComprar(discord.ui.View):
                 pagamento_id=pix_data.get('payment_id', 'N/A')
             )
             
+            # Embed do PIX
             embed_pix = discord.Embed(
                 title="🧾 **PAGAMENTO PIX**",
                 description=f"**Produto:** {pix_data['produto']}\n**Valor:** R$ {pix_data['preco']:.2f}",
