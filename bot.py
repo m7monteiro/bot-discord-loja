@@ -39,6 +39,7 @@ CANAL_PAGOS = 1473182832225554554      # Canal #pagamentos-confirmados
 
 # 🔴 SEU ID DO DISCORD
 MEU_ID = 1439411460378726530
+CARGO_ADMIN = 1472666559049633952  # ID do cargo de admin (use o mesmo do CARGO_MEMBRO ou crie um específico)
 
 # Dicionário para armazenar mensagens de carrinho
 carrinhos_ativos = {}  # {pagamento_id: {"canal": canal, "mensagem_id": id, "usuario": user_id}}
@@ -263,6 +264,80 @@ class BotaoComprar(discord.ui.View):
             await user.send("❌ **Ocorreu um erro inesperado.** Contate um administrador.")
 
 # ===============================
+# COMANDO DE ENTREGA MANUAL (SÓ PARA ADMINS)
+# ===============================
+@bot.tree.command(name="entregar", description="[ADMIN] Envia a conta Rockstar para o cliente")
+@app_commands.describe(
+    usuario="ID do usuário que comprou",
+    conta="A conta Rockstar (login:senha)"
+)
+async def entregar_conta(
+    interaction: discord.Interaction, 
+    usuario: str, 
+    conta: str
+):
+    # Verificar se é admin (pelo cargo ou por ser o dono)
+    is_admin = False
+    if interaction.user.id == MEU_ID:
+        is_admin = True
+    else:
+        for role in interaction.user.roles:
+            if role.id == CARGO_ADMIN:
+                is_admin = True
+                break
+    
+    if not is_admin:
+        await interaction.response.send_message("❌ **Apenas administradores podem usar este comando.**", ephemeral=True)
+        return
+    
+    await interaction.response.defer(ephemeral=True)
+    
+    try:
+        # Converter usuario para int (ID)
+        user_id = int(usuario)
+        
+        # Buscar usuário
+        user = await bot.fetch_user(user_id)
+        
+        if not user:
+            await interaction.followup.send("❌ **Usuário não encontrado.**")
+            return
+        
+        # Enviar a conta na DM do cliente
+        await user.send(
+            "🎮 **Sua Conta Rockstar chegou!**\n\n"
+            f"```{conta}```\n\n"
+            "✅ Obrigado pela preferência!"
+        )
+        
+        # Avisar que entregou
+        await interaction.followup.send(
+            f"✅ **Conta entregue com sucesso para {user.name}!**\n"
+            f"```{conta}```"
+        )
+        
+        # Log no canal de pagamentos
+        canal_pagos = bot.get_channel(CANAL_PAGOS)
+        if canal_pagos:
+            embed = discord.Embed(
+                title="📦 **CONTA ROCKSTAR ENTREGUE**",
+                color=0x3498db,
+                timestamp=datetime.now()
+            )
+            embed.add_field(name="👤 **Cliente**", value=user.mention, inline=True)
+            embed.add_field(name="🆔 **ID**", value=user_id, inline=True)
+            embed.add_field(name="🔐 **Conta**", value=f"||{conta}||", inline=False)  # Spoiler
+            embed.set_footer(text=f"Entregue por: {interaction.user.name}")
+            
+            await canal_pagos.send(embed=embed)
+        
+    except ValueError:
+        await interaction.followup.send("❌ **ID do usuário inválido.** Certifique-se de colocar apenas números.")
+    except Exception as e:
+        await interaction.followup.send(f"❌ **Erro ao entregar:** {e}")
+        print(f"❌ Erro no comando entregar: {e}")
+
+# ===============================
 # COMANDOS
 # ===============================
 @bot.tree.command(name="comprar", description="Comprar Pack Counter Strike")
@@ -285,7 +360,7 @@ async def comprar_rockstar(interaction: discord.Interaction):
     
     embed = discord.Embed(
         title="🎮 **Conta Rockstar**",
-        description="✅ Conta pronta\n✅ Entrega Automática\n✅ Garantia",
+        description="✅ Conta pronta\n✅ Entrega manual via administrador\n✅ Garantia",
         color=0x3498db
     )
     embed.add_field(name="💰 **Preço**", value="R$ 4,99", inline=False)
@@ -386,10 +461,10 @@ def webhook():
             print(f"✅ Produto CS enviado para {user.name}")
             
         elif produto == "rockstar":
-            # Entrega manual
+            # Apenas aviso - entrega manual será feita pelo admin com /entregar
             future = asyncio.run_coroutine_threadsafe(
                 user.send(
-                    "✅ **Pagamento aprovado!**\n📦 Sua Conta Rockstar será entregue em breve por um administrador."
+                    "✅ **Pagamento aprovado!**\n📦 Sua Conta Rockstar será entregue em breve por um administrador.\n\n🔜 Você receberá a conta nesta mesma conversa assim que possível."
                 ), bot.loop
             )
             future.result(timeout=10)
@@ -406,7 +481,11 @@ def webhook():
             embed.add_field(name="👤 **Cliente**", value=user.mention, inline=True)
             embed.add_field(name="📦 **Produto**", value=produto_info["nome"], inline=True)
             embed.add_field(name="💰 **Valor**", value=f"R$ {produto_info['preco']:.2f}", inline=True)
-            embed.set_footer(text="🎉 Produto entregue com sucesso!")
+            
+            if produto == "rockstar":
+                embed.add_field(name="📌 **Status**", value="Aguardando entrega manual", inline=False)
+            
+            embed.set_footer(text="🎉 Pagamento confirmado!")
             
             asyncio.run_coroutine_threadsafe(canal_pagos.send(embed=embed), bot.loop)
         
