@@ -33,8 +33,12 @@ GUILD_ID = 1472114509068898367
 CARGO_MEMBRO = 1472666559049633952
 CARGO_CLIENTE = 1472666841515032676
 
-# 🟡 ID DO CANAL DE CARRINHOS ATIVOS
+# IDs dos canais de log
 CANAL_CARRINHOS = 1473180070851117108  # Canal #carrinhos-ativos
+CANAL_PAGOS = 1473182832225554554      # Canal #pagamentos-confirmados
+
+# Dicionário para armazenar mensagens de carrinho (simplificado - em produção use banco de dados)
+carrinhos_ativos = {}  # {pagamento_id: {"canal": canal, "mensagem_id": id}}
 
 # ===============================
 # MERCADO PAGO
@@ -73,7 +77,7 @@ def criar_pagamento_pix(user_id, produto="cs"):
                 "expiration": payment["date_of_expiration"],
                 "produto": produto_info["nome"],
                 "preco": produto_info["preco"],
-                "payment_id": payment["id"]  # Adicionamos o ID do pagamento
+                "payment_id": payment["id"]
             }
     except Exception as e:
         print(f"❌ Erro PIX: {e}")
@@ -82,22 +86,22 @@ def criar_pagamento_pix(user_id, produto="cs"):
     return None
 
 # ===============================
-# FUNÇÃO PARA LOG DE CARRINHOS
+# FUNÇÃO PARA LOG DE CARRINHOS (AGORA RETORNA A MENSAGEM)
 # ===============================
 async def log_carrinho_ativo(user, produto_nome, valor, pagamento_id):
     """
     Envia uma mensagem no canal de carrinhos ativos
-    quando alguém clica em comprar
+    e retorna a mensagem enviada para referência futura
     """
     try:
         canal = bot.get_channel(CANAL_CARRINHOS)
         if not canal:
             print("❌ Canal de carrinhos não encontrado!")
-            return
+            return None
         
         embed = discord.Embed(
             title="🛒 **NOVO CARRINHO ATIVO**",
-            color=0xffaa00,  # Amarelo
+            color=0xffaa00,
             timestamp=datetime.now()
         )
         
@@ -108,11 +112,70 @@ async def log_carrinho_ativo(user, produto_nome, valor, pagamento_id):
         embed.add_field(name="🆔 **Pagamento**", value=f"`{pagamento_id}`", inline=False)
         embed.set_footer(text="⏳ Aguardando pagamento...")
         
-        await canal.send(embed=embed)
+        mensagem = await canal.send(embed=embed)
         print(f"✅ Log enviado para canal de carrinhos")
+        
+        # Armazenar a mensagem para remover depois
+        carrinhos_ativos[str(pagamento_id)] = {
+            "canal": canal.id,
+            "mensagem_id": mensagem.id,
+            "usuario": user.id
+        }
+        
+        return mensagem
         
     except Exception as e:
         print(f"❌ Erro ao enviar log de carrinho: {e}")
+        return None
+
+# ===============================
+# FUNÇÃO PARA REMOVER DO CARRINHO E LOG DE PAGAMENTO
+# ===============================
+async def log_pagamento_confirmado(user, produto_nome, valor, pagamento_id):
+    """
+    Remove a mensagem do canal de carrinhos e envia para o canal de pagos
+    """
+    try:
+        # 1️⃣ REMOVER DO CANAL DE CARRINHOS
+        if str(pagamento_id) in carrinhos_ativos:
+            dados_carrinho = carrinhos_ativos[str(pagamento_id)]
+            canal_carrinho = bot.get_channel(dados_carrinho["canal"])
+            
+            if canal_carrinho:
+                try:
+                    mensagem = await canal_carrinho.fetch_message(dados_carrinho["mensagem_id"])
+                    await mensagem.delete()
+                    print(f"✅ Mensagem do carrinho removida (Pagamento: {pagamento_id})")
+                except:
+                    print(f"⚠️ Mensagem do carrinho já não existe")
+            
+            # Remover do dicionário
+            del carrinhos_ativos[str(pagamento_id)]
+        
+        # 2️⃣ ENVIAR PARA O CANAL DE PAGOS
+        canal_pagos = bot.get_channel(CANAL_PAGOS)
+        if not canal_pagos:
+            print("❌ Canal de pagos não encontrado!")
+            return
+        
+        embed = discord.Embed(
+            title="✅ **PAGAMENTO CONFIRMADO**",
+            color=0x00ff88,
+            timestamp=datetime.now()
+        )
+        
+        embed.add_field(name="👤 **Cliente**", value=user.mention, inline=True)
+        embed.add_field(name="📦 **Produto**", value=produto_nome, inline=True)
+        embed.add_field(name="💰 **Valor**", value=f"R$ {valor:.2f}", inline=True)
+        embed.add_field(name="⏰ **Horário**", value=datetime.now().strftime("%d/%m/%Y %H:%M:%S"), inline=False)
+        embed.add_field(name="🆔 **Pagamento**", value=f"`{pagamento_id}`", inline=False)
+        embed.set_footer(text="🎉 Produto entregue com sucesso!")
+        
+        await canal_pagos.send(embed=embed)
+        print(f"✅ Log de pagamento enviado para canal de pagos")
+        
+    except Exception as e:
+        print(f"❌ Erro ao processar pagamento: {e}")
 
 # ===============================
 # DISCORD
@@ -140,7 +203,7 @@ bot = Bot()
 # ===============================
 class CopiarPIXView(discord.ui.View):
     def __init__(self, codigo_pix: str):
-        super().__init__(timeout=300)  # 5 minutos
+        super().__init__(timeout=300)
         self.codigo_pix = codigo_pix
 
     @discord.ui.button(label="📋 Copiar código PIX", style=discord.ButtonStyle.primary)
@@ -162,18 +225,14 @@ class BotaoComprar(discord.ui.View):
     @discord.ui.button(label="🛒 Comprar Agora", style=discord.ButtonStyle.green, emoji="💳")
     async def botao_comprar(self, interaction: discord.Interaction, button: discord.ui.Button):
         
-        # AVISAR QUE VAI PRO PRIVADO
         await interaction.response.send_message("📨 **Enviando informações no seu privado...**", ephemeral=True)
         
-        # Desabilitar botão (opcional)
         button.disabled = True
         await interaction.edit_original_response(view=self)
         
-        # Buscar usuário para DM
         user = interaction.user
         
         try:
-            # Gerar PIX
             pix_data = criar_pagamento_pix(self.user_id, self.produto)
             
             if not pix_data:
@@ -195,7 +254,6 @@ class BotaoComprar(discord.ui.View):
                 color=0x00ff88
             )
             
-            # Calcular expiração
             try:
                 expiracao = datetime.fromisoformat(pix_data["expiration"].replace("Z", "+00:00"))
                 tempo_restante = expiracao - datetime.now(expiracao.tzinfo)
@@ -206,27 +264,22 @@ class BotaoComprar(discord.ui.View):
             
             embed_pix.set_footer(text="Você receberá o produto aqui assim que o pagamento for confirmado!")
             
-            # Converter QR Code para imagem
             qr_image_data = base64.b64decode(pix_data["qr_code_base64"])
-            
-            # Criar view com botão de copiar
             copiar_view = CopiarPIXView(pix_data["qr_code"])
             
-            # Enviar TUDO no privado (embed + qr + botão de copiar)
             with BytesIO(qr_image_data) as image_binary:
                 image_binary.seek(0)
                 file = discord.File(fp=image_binary, filename="qrcode.png")
                 await user.send(embed=embed_pix, file=file, view=copiar_view)
                 
         except discord.Forbidden:
-            # Se o usuário bloqueou DM
             await interaction.followup.send("❌ **Não consegui te enviar mensagem no privado!**\nVerifique se você permite DMs de membros do servidor.", ephemeral=True)
         except Exception as e:
             print(f"❌ Erro: {e}")
             await user.send("❌ **Ocorreu um erro inesperado.** Contate um administrador.")
 
 # ===============================
-# COMANDOS - SÓ MOSTRAM O PRODUTO
+# COMANDOS
 # ===============================
 @bot.tree.command(name="comprar", description="Comprar Pack Counter Strike")
 async def comprar(interaction: discord.Interaction):
@@ -237,7 +290,7 @@ async def comprar(interaction: discord.Interaction):
         color=0x00ff88
     )
     embed.add_field(name="💰 **Preço**", value="R$ 24,99", inline=False)
-    embed.set_image(url="https://i.imgur.com/EuTrxjn.png")  # SUA ARTE AQUI
+    embed.set_image(url="https://i.imgur.com/EuTrxjn.png")
     embed.set_footer(text="Legend Store — Clique no botão para pagar via PIX")
     
     view = BotaoComprar(produto="cs", user_id=interaction.user.id)
@@ -252,7 +305,7 @@ async def comprar_rockstar(interaction: discord.Interaction):
         color=0x3498db
     )
     embed.add_field(name="💰 **Preço**", value="R$ 4,99", inline=False)
-    embed.set_image(url="https://i.imgur.com/ppmITej.png")  # SUA ARTE AQUI
+    embed.set_image(url="https://i.imgur.com/ppmITej.png")
     embed.set_footer(text="Legend Store — Clique no botão para pagar via PIX")
     
     view = BotaoComprar(produto="rockstar", user_id=interaction.user.id)
@@ -281,6 +334,29 @@ def webhook():
                 
                 print(f"✅ Pagamento aprovado! Produto: {produto}")
                 
+                # Buscar dados do produto
+                produtos = {
+                    "cs": {"nome": "Pack Counter Strike", "preco": 24.99},
+                    "rockstar": {"nome": "Conta Rockstar", "preco": 4.99}
+                }
+                produto_info = produtos.get(produto, produtos["cs"])
+                
+                # Buscar usuário
+                user = bot.get_user(user_id)
+                
+                if user:
+                    # ===== REMOVER DO CARRINHO E LOGAR NO CANAL DE PAGOS =====
+                    asyncio.run_coroutine_threadsafe(
+                        log_pagamento_confirmado(
+                            user=user,
+                            produto_nome=produto_info["nome"],
+                            valor=produto_info["preco"],
+                            pagamento_id=payment_id
+                        ),
+                        bot.loop
+                    )
+                
+                # Entregar o produto
                 if produto == "cs":
                     asyncio.run_coroutine_threadsafe(enviar_produto(user_id), bot.loop)
                 elif produto == "rockstar":
