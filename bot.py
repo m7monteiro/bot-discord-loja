@@ -373,6 +373,11 @@ async def entregar_conta(
 # ===============================
 app = Flask(__name__)
 
+# 🔥 ROTA PRINCIPAL PARA O UPTIMEROBOT 🔥
+@app.route('/')
+def home():
+    return "🤖 Bot está online e funcionando!", 200
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.json
