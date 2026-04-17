@@ -58,8 +58,8 @@ def carregar_produtos():
     else:
         # Produtos padrão
         produtos_padrao = {
-            "cs": {"nome": "Pack Counter Strike", "preco": 24.99, "descricao": "Pack completo do Counter Strike", "tipo": "auto"},
-            "rockstar": {"nome": "Conta Rockstar", "preco": 4.99, "descricao": "Conta Rockstar Games", "tipo": "manual"}
+            "cs": {"nome": "Pack Counter Strike", "preco": 24.99, "descricao": "✅ Pack completo do Counter Strike\n✅ Acesso vitalício\n✅ Garantia de 30 dias", "tipo": "auto"},
+            "rockstar": {"nome": "Conta Rockstar", "preco": 4.99, "descricao": "✅ Conta 100% nova\n✅ Acesso vitalício\n✅ Licenciada\n✅ Sem banimentos", "tipo": "manual"}
         }
         salvar_produtos(produtos_padrao)
         return produtos_padrao
@@ -305,7 +305,7 @@ async def listar_produtos(interaction: discord.Interaction):
     embed = discord.Embed(
         title="🛒 **NOSSOS PRODUTOS**",
         description="Use `/comprar [id]` para adquirir qualquer produto!",
-        color=0x00ff88,
+        color=0x5865F2,
         timestamp=datetime.now()
     )
     
@@ -322,8 +322,109 @@ async def listar_produtos(interaction: discord.Interaction):
             inline=False
         )
     
-    embed.set_footer(text="Exemplo: /comprar cs  ou  /comprar rockstar")
+    embed.set_footer(text="Legend Store • Clique no botão abaixo para comprar!")
     await interaction.response.send_message(embed=embed, ephemeral=True)
+
+# ===============================
+# COMANDO /LOJA - CARD BONITO DINÂMICO
+# ===============================
+
+@bot.tree.command(name="loja", description="🛒 Ver todos os produtos da loja em cards bonitos")
+async def mostrar_loja(interaction: discord.Interaction):
+    """Mostra a loja com todos os produtos em cards bonitos"""
+    
+    embed = discord.Embed(
+        title="🛍️ **LEGEND STORE**",
+        description="🎮 **Os melhores produtos para você!**\n╰┈➤ Selecione um produto abaixo",
+        color=0x5865F2,
+        timestamp=datetime.now()
+    )
+    
+    # Adiciona cada produto como um field no embed
+    for key, prod in produtos_disponiveis.items():
+        tipo_emoji = "🤖" if prod.get('tipo') == 'auto' else "👨‍💼"
+        tipo_texto = "Entrega Automática" if prod.get('tipo') == 'auto' else "Entrega Manual"
+        
+        # Descrição formatada com checkmarks
+        desc_formatada = prod.get('descricao', 'Sem descrição')
+        
+        embed.add_field(
+            name=f"**📦 {prod['nome']}**",
+            value=f"```{desc_formatada}```\n"
+                  f"💰 **Preço:** `R$ {prod['preco']:.2f}`\n"
+                  f"🎮 **Entrega:** {tipo_emoji} {tipo_texto}\n"
+                  f"🆔 **ID:** `{key}`\n"
+                  f"╰┈➤ **Clique no botão abaixo para comprar!**",
+            inline=False
+        )
+    
+    embed.set_footer(text="Legend Store • Segurança e Qualidade • PIX na hora!")
+    
+    # Criar view com botões para cada produto
+    view = discord.ui.View(timeout=None)
+    
+    for key, prod in produtos_disponiveis.items():
+        button = discord.ui.Button(
+            label=f"🛒 {prod['nome']} - R$ {prod['preco']:.2f}",
+            style=discord.ButtonStyle.success,
+            custom_id=f"loja_comprar_{key}",
+            emoji="🛒"
+        )
+        
+        async def button_callback(interaction: discord.Interaction, produto_id=key):
+            await interaction.response.defer(ephemeral=True)
+            
+            user = interaction.user
+            
+            try:
+                pix_data = criar_pagamento_pix(user.id, produto_id)
+                
+                if not pix_data:
+                    await interaction.followup.send("❌ **Erro ao gerar pagamento.** Tente novamente mais tarde.", ephemeral=True)
+                    return
+                
+                await log_carrinho_ativo(
+                    user=user,
+                    produto_nome=pix_data['produto'],
+                    valor=pix_data['preco'],
+                    pagamento_id=pix_data.get('payment_id', 'N/A')
+                )
+                
+                embed_pix = discord.Embed(
+                    title="🧾 **PAGAMENTO PIX**",
+                    description=f"**Produto:** {pix_data['produto']}\n**Valor:** R$ {pix_data['preco']:.2f}",
+                    color=0x00ff88
+                )
+                
+                try:
+                    expiracao = datetime.fromisoformat(pix_data["expiration"].replace("Z", "+00:00"))
+                    tempo_restante = expiracao - datetime.now(expiracao.tzinfo)
+                    minutos = int(tempo_restante.total_seconds() / 60)
+                    embed_pix.add_field(name="⏰ Expira em", value=f"{minutos} minutos", inline=True)
+                except:
+                    embed_pix.add_field(name="⏰ Expira em", value="15 minutos", inline=True)
+                
+                embed_pix.set_footer(text="Você receberá o produto aqui assim que o pagamento for confirmado!")
+                
+                qr_image_data = base64.b64decode(pix_data["qr_code_base64"])
+                copiar_view = CopiarPIXView(pix_data["qr_code"])
+                
+                with BytesIO(qr_image_data) as image_binary:
+                    image_binary.seek(0)
+                    file = discord.File(fp=image_binary, filename="qrcode.png")
+                    await user.send(embed=embed_pix, file=file, view=copiar_view)
+                    
+                await interaction.followup.send("📨 **Informações enviadas no seu privado!**", ephemeral=True)
+                
+            except Exception as e:
+                print(f"❌ Erro: {e}")
+                await interaction.followup.send("❌ **Ocorreu um erro.** Contate um administrador.", ephemeral=True)
+        
+        button.callback = button_callback
+        view.add_item(button)
+    
+    await interaction.response.send_message(embed=embed, view=view)
+
 
 # ===============================
 # COMANDOS DE ADMIN (GERENCIAMENTO)
@@ -334,7 +435,7 @@ async def listar_produtos(interaction: discord.Interaction):
     id="ID único do produto (ex: vip, cs, minecraft)",
     nome="Nome do produto",
     preco="Preço em R$",
-    descricao="Descrição do produto",
+    descricao="Descrição do produto (use ✅ para listar itens)",
     tipo="Tipo: auto (entrega automática) ou manual (você entrega)"
 )
 async def criar_produto(
@@ -373,7 +474,8 @@ async def criar_produto(
         f"📝 **Nome:** {nome}\n"
         f"💰 **Preço:** R$ {preco:.2f}\n"
         f"📄 **Descrição:** {descricao}\n"
-        f"🎮 **Tipo:** {tipo_texto}",
+        f"🎮 **Tipo:** {tipo_texto}\n\n"
+        f"💡 Use `/loja` para ver o card bonito do produto!",
         ephemeral=True
     )
 
@@ -401,7 +503,8 @@ async def editar_preco(interaction: discord.Interaction, produto_id: str, novo_p
         f"✅ **Preço atualizado!**\n\n"
         f"📦 **Produto:** {produto['nome']}\n"
         f"📉 **Preço antigo:** R$ {preco_antigo:.2f}\n"
-        f"📈 **Novo preço:** R$ {novo_preco:.2f}",
+        f"📈 **Novo preço:** R$ {novo_preco:.2f}\n\n"
+        f"💡 Use `/loja` para ver o card atualizado!",
         ephemeral=True
     )
 
@@ -439,6 +542,7 @@ async def editar_produto(
         mensagem += f"📄 **Nova descrição:** {nova_descricao}\n"
     
     salvar_produtos(produtos_disponiveis)
+    mensagem += f"\n💡 Use `/loja` para ver o card atualizado!"
     await interaction.response.send_message(mensagem, ephemeral=True)
 
 
