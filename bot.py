@@ -63,14 +63,14 @@ def carregar_produtos():
                 "preco": 24.99, 
                 "descricao": "✅ Pack completo do Counter Strike\n✅ Acesso vitalício\n✅ Garantia de 30 dias\n✅ Suporte 24/7", 
                 "tipo": "auto",
-                "imagem": "https://cdn.discordapp.com/attachments/example/cs-image.png"
+                "imagem": ""
             },
             "rockstar": {
                 "nome": "Conta Rockstar", 
                 "preco": 4.99, 
                 "descricao": "✅ Conta 100% nova\n✅ Acesso vitalício\n✅ Licenciada\n✅ Sem banimentos\n\n📌 Contas Rockstar Oday são ideais para contornar banimentos globais ou HWID. Elas não possuem nenhum tipo de banimento anterior.", 
                 "tipo": "manual",
-                "imagem": "https://cdn.discordapp.com/attachments/example/rockstar-image.png"
+                "imagem": ""
             }
         }
         salvar_produtos(produtos_padrao)
@@ -446,7 +446,7 @@ async def criar_embed_produto(produto_id: str, produto_info: dict):
     """Cria um embed bonito para o produto"""
     
     # Usar imagem personalizada ou padrão
-    imagem_url = produto_info.get('imagem', 'https://cdn.discordapp.com/attachments/example/default.png')
+    imagem_url = produto_info.get('imagem', '')
     
     embed = discord.Embed(
         title=f"🎮 **{produto_info['nome'].upper()}**",
@@ -481,7 +481,7 @@ async def criar_embed_produto(produto_id: str, produto_info: dict):
     
     embed.set_footer(text="Legend Store • Clique no botão abaixo para comprar!")
     
-    if imagem_url:
+    if imagem_url and imagem_url != "":
         embed.set_thumbnail(url=imagem_url)
     
     return embed
@@ -645,6 +645,108 @@ async def atualizar_canais(interaction: discord.Interaction):
     await interaction.followup.send(f"✅ **{atualizados} canais atualizados!**", ephemeral=True)
 
 
+@bot.tree.command(name="atualizar_produto", description="[ADMIN] Atualizar produto e canal automaticamente")
+@app_commands.describe(
+    produto_id="ID do produto",
+    novo_nome="Novo nome (opcional)",
+    novo_preco="Novo preço (opcional)",
+    nova_descricao="Nova descrição (opcional)",
+    nova_imagem="Nova URL da imagem (opcional)"
+)
+async def atualizar_produto(
+    interaction: discord.Interaction,
+    produto_id: str,
+    novo_nome: str = None,
+    novo_preco: float = None,
+    nova_descricao: str = None,
+    nova_imagem: str = None
+):
+    if interaction.user.id != MEU_ID:
+        await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
+        return
+    
+    if produto_id not in produtos_disponiveis:
+        await interaction.response.send_message(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
+        return
+    
+    await interaction.response.defer(ephemeral=True)
+    
+    produto = produtos_disponiveis[produto_id]
+    mensagem = f"✅ **Produto atualizado!**\n\n"
+    
+    # Atualizar dados
+    if novo_nome:
+        mensagem += f"📝 **Nome:** {produto['nome']} → {novo_nome}\n"
+        produto["nome"] = novo_nome
+    
+    if novo_preco:
+        mensagem += f"💰 **Preço:** R$ {produto['preco']:.2f} → R$ {novo_preco:.2f}\n"
+        produto["preco"] = novo_preco
+    
+    if nova_descricao:
+        mensagem += f"📄 **Descrição atualizada**\n"
+        produto["descricao"] = nova_descricao
+    
+    if nova_imagem:
+        mensagem += f"🖼️ **Imagem atualizada**\n"
+        produto["imagem"] = nova_imagem
+    
+    salvar_produtos(produtos_disponiveis)
+    
+    # ATUALIZAR O CANAL AUTOMATICAMENTE
+    canal_atualizado = False
+    for channel in interaction.guild.channels:
+        if channel.name == produto_id or channel.name == produto_id.lower():
+            async for msg in channel.history(limit=50):
+                if msg.author == bot.user:
+                    await msg.delete()
+            
+            embed = await criar_embed_produto(produto_id, produto)
+            view = ProdutoCompraView(produto_id, produto['nome'])
+            await channel.send(embed=embed, view=view)
+            canal_atualizado = True
+            break
+    
+    if canal_atualizado:
+        mensagem += f"\n✅ **Canal #{produto_id} atualizado automaticamente!**"
+    else:
+        mensagem += f"\n⚠️ **Canal não encontrado. Use `/configurar_produto` para criar.**"
+    
+    await interaction.followup.send(mensagem, ephemeral=True)
+
+
+@bot.tree.command(name="sincronizar_canal", description="[ADMIN] Forçar atualização do canal do produto")
+@app_commands.describe(produto_id="ID do produto")
+async def sincronizar_canal(interaction: discord.Interaction, produto_id: str):
+    if interaction.user.id != MEU_ID:
+        await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
+        return
+    
+    if produto_id not in produtos_disponiveis:
+        await interaction.response.send_message(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
+        return
+    
+    await interaction.response.defer(ephemeral=True)
+    
+    canal_atualizado = False
+    for channel in interaction.guild.channels:
+        if channel.name == produto_id or channel.name == produto_id.lower():
+            async for msg in channel.history(limit=50):
+                if msg.author == bot.user:
+                    await msg.delete()
+            
+            embed = await criar_embed_produto(produto_id, produtos_disponiveis[produto_id])
+            view = ProdutoCompraView(produto_id, produtos_disponiveis[produto_id]['nome'])
+            await channel.send(embed=embed, view=view)
+            canal_atualizado = True
+            break
+    
+    if canal_atualizado:
+        await interaction.followup.send(f"✅ **Canal #{produto_id} sincronizado com os dados mais recentes!**", ephemeral=True)
+    else:
+        await interaction.followup.send(f"❌ **Canal para {produto_id} não encontrado!** Use `/configurar_produto` primeiro.", ephemeral=True)
+
+
 @bot.tree.command(name="editar_imagem", description="[ADMIN] Mudar a imagem do produto")
 @app_commands.describe(
     produto_id="ID do produto",
@@ -666,7 +768,7 @@ async def editar_imagem(interaction: discord.Interaction, produto_id: str, url_i
     await interaction.response.send_message(
         f"✅ **Imagem atualizada para {produtos_disponiveis[produto_id]['nome']}!**\n"
         f"🖼️ Nova imagem: {url_imagem}\n\n"
-        f"💡 Use `/atualizar_canais` para aplicar a mudança.",
+        f"💡 Use `/sincronizar_canal {produto_id}` para aplicar a mudança no canal.",
         ephemeral=True
     )
 
@@ -750,7 +852,7 @@ async def editar_preco(interaction: discord.Interaction, produto_id: str, novo_p
         f"📦 **Produto:** {produto['nome']}\n"
         f"📉 **Preço antigo:** R$ {preco_antigo:.2f}\n"
         f"📈 **Novo preço:** R$ {novo_preco:.2f}\n\n"
-        f"💡 Use `/loja` ou `/atualizar_canais` para ver o card atualizado!",
+        f"💡 Use `/atualizar_produto` para atualizar tudo de uma vez!",
         ephemeral=True
     )
 
@@ -788,7 +890,7 @@ async def editar_produto(
         mensagem += f"📄 **Nova descrição:** {nova_descricao}\n"
     
     salvar_produtos(produtos_disponiveis)
-    mensagem += f"\n💡 Use `/loja` ou `/atualizar_canais` para ver o card atualizado!"
+    mensagem += f"\n💡 Use `/atualizar_produto` para atualizar tudo de uma vez!"
     await interaction.response.send_message(mensagem, ephemeral=True)
 
 
