@@ -35,18 +35,16 @@ GUILD_ID = 1472114509068898367
 CARGO_MEMBRO = 1472666559049633952
 CARGO_CLIENTE = 1472666841515032676
 
-# IDs dos canais de log
 CANAL_CARRINHOS = 1473180070851117108
 CANAL_PAGOS = 1473182832225554554
 
-# 🔴 SEU ID DO DISCORD
 MEU_ID = 1439411460378726530
 CARGO_ADMIN = 1472666559049633952
 
 carrinhos_ativos = {}
 
 # ===============================
-# SISTEMA DE GERENCIAMENTO DE PRODUTOS
+# SISTEMA DE GERENCIAMENTO DE PRODUTOS COM VARIAÇÕES
 # ===============================
 
 def carregar_produtos():
@@ -60,14 +58,19 @@ def carregar_produtos():
                 "preco": 24.99,
                 "descricao": "✅ Pack completo do Counter Strike\n✅ Acesso vitalício\n✅ Garantia de 30 dias\n✅ Suporte 24/7",
                 "tipo": "auto",
-                "imagem": ""
+                "imagem": "",
+                "variacoes": []
             },
             "rockstar": {
                 "nome": "Conta Rockstar",
-                "preco": 4.99,
+                "preco": 2.60,
                 "descricao": "✅ Rockstar nova e nunca utilizada\n✅ Conta Rockstar 100% segura\n✅ Acesso total (Full Acesso)\n✅ Ideal para unban do CFX Global e HWID do FiveM\n✅ Já com licença ativa para jogar FiveM",
                 "tipo": "manual",
-                "imagem": ""
+                "imagem": "",
+                "variacoes": [
+                    {"nome": "Completo (com GTA)", "preco": 4.99},
+                    {"nome": "Apenas Conta", "preco": 2.60}
+                ]
             }
         }
         salvar_produtos(produtos_padrao)
@@ -85,15 +88,12 @@ print(f"📦 {len(produtos_disponiveis)} produtos carregados")
 # ===============================
 sdk = mercadopago.SDK(MP_ACCESS_TOKEN)
 
-def criar_pagamento_pix(user_id, produto_id):
-    if produto_id not in produtos_disponiveis:
-        return None
-    
-    produto_info = produtos_disponiveis[produto_id]
+def criar_pagamento_pix_com_preco(user_id, produto_id, preco, nome_produto):
+    """Gera pagamento PIX com preço personalizado"""
     
     payment_data = {
-        "transaction_amount": produto_info["preco"],
-        "description": produto_info["nome"],
+        "transaction_amount": preco,
+        "description": nome_produto,
         "payment_method_id": "pix",
         "payer": {"email": f"cliente_{user_id}@temp.com"},
         "external_reference": f"{produto_id}_{user_id}_{int(time.time())}",
@@ -111,11 +111,10 @@ def criar_pagamento_pix(user_id, produto_id):
                 "qr_code": pix_data["qr_code"],
                 "qr_code_base64": pix_data["qr_code_base64"],
                 "expiration": payment["date_of_expiration"],
-                "produto": produto_info["nome"],
-                "preco": produto_info["preco"],
+                "produto": nome_produto,
+                "preco": preco,
                 "payment_id": payment["id"],
-                "produto_id": produto_id,
-                "tipo": produto_info.get("tipo", "auto")
+                "produto_id": produto_id
             }
     except Exception as e:
         print(f"❌ Erro PIX: {e}")
@@ -229,6 +228,87 @@ class CopiarPIXView(discord.ui.View):
         )
 
 # ===============================
+# CLASSE DO MENU DE VARIAÇÕES
+# ===============================
+class VariacoesView(discord.ui.View):
+    def __init__(self, produto_id: str, produto_nome: str, variacoes: list):
+        super().__init__(timeout=None)
+        self.produto_id = produto_id
+        self.produto_nome = produto_nome
+        
+        # Criar menu de seleção
+        select = discord.ui.Select(
+            placeholder="📦 Selecione uma opção...",
+            options=[
+                discord.SelectOption(
+                    label=v["nome"],
+                    description=f"R$ {v['preco']:.2f}",
+                    emoji="🎮" if i == 0 else "⭐",
+                    value=str(i)
+                ) for i, v in enumerate(variacoes)
+            ]
+        )
+        select.callback = self.selecionar_opcao
+        self.add_item(select)
+    
+    async def selecionar_opcao(self, interaction: discord.Interaction):
+        index = int(interaction.data["values"][0])
+        produto_info = produtos_disponiveis[self.produto_id]
+        variacao = produto_info["variacoes"][index]
+        
+        await interaction.response.defer(ephemeral=True)
+        user = interaction.user
+        
+        try:
+            pix_data = criar_pagamento_pix_com_preco(
+                user.id, 
+                self.produto_id, 
+                variacao["preco"], 
+                f"{self.produto_nome} - {variacao['nome']}"
+            )
+            
+            if not pix_data:
+                await interaction.followup.send("❌ Erro ao gerar pagamento.", ephemeral=True)
+                return
+            
+            await log_carrinho_ativo(
+                user=user,
+                produto_nome=pix_data['produto'],
+                valor=pix_data['preco'],
+                pagamento_id=pix_data.get('payment_id', 'N/A')
+            )
+            
+            embed_pix = discord.Embed(
+                title="🧾 PAGAMENTO PIX",
+                description=f"**Produto:** {pix_data['produto']}\n**Valor:** R$ {pix_data['preco']:.2f}",
+                color=0x00ff88
+            )
+            
+            try:
+                expiracao = datetime.fromisoformat(pix_data["expiration"].replace("Z", "+00:00"))
+                tempo_restante = expiracao - datetime.now(expiracao.tzinfo)
+                minutos = int(tempo_restante.total_seconds() / 60)
+                embed_pix.add_field(name="⏰ Expira em", value=f"{minutos} minutos", inline=True)
+            except:
+                embed_pix.add_field(name="⏰ Expira em", value="15 minutos", inline=True)
+            
+            embed_pix.set_footer(text="Você receberá o produto aqui assim que o pagamento for confirmado!")
+            
+            qr_image_data = base64.b64decode(pix_data["qr_code_base64"])
+            copiar_view = CopiarPIXView(pix_data["qr_code"])
+            
+            with BytesIO(qr_image_data) as image_binary:
+                image_binary.seek(0)
+                file = discord.File(fp=image_binary, filename="qrcode.png")
+                await user.send(embed=embed_pix, file=file, view=copiar_view)
+                
+            await interaction.followup.send("📨 Informações enviadas no seu privado!", ephemeral=True)
+            
+        except Exception as e:
+            print(f"❌ Erro: {e}")
+            await interaction.followup.send("❌ Ocorreu um erro.", ephemeral=True)
+
+# ===============================
 # COMANDO DE COMPRA
 # ===============================
 @bot.tree.command(name="comprar", description="Comprar um produto da loja")
@@ -246,10 +326,23 @@ async def comprar(interaction: discord.Interaction, produto: str = "cs"):
             )
             return
         
-        pix_data = criar_pagamento_pix(user.id, produto)
+        produto_info = produtos_disponiveis[produto]
+        
+        # Se tem variações, mostra o menu
+        if produto_info.get("variacoes") and len(produto_info["variacoes"]) > 0:
+            view = VariacoesView(produto, produto_info['nome'], produto_info["variacoes"])
+            await interaction.followup.send(
+                f"📦 **{produto_info['nome']}**\n\nSelecione a opção desejada:",
+                view=view,
+                ephemeral=True
+            )
+            return
+        
+        # Sem variações, compra normal
+        pix_data = criar_pagamento_pix_com_preco(user.id, produto, produto_info["preco"], produto_info['nome'])
         
         if not pix_data:
-            await interaction.followup.send("❌ Erro ao gerar pagamento. Tente novamente mais tarde.", ephemeral=True)
+            await interaction.followup.send("❌ Erro ao gerar pagamento.", ephemeral=True)
             return
         
         await log_carrinho_ativo(
@@ -287,7 +380,115 @@ async def comprar(interaction: discord.Interaction, produto: str = "cs"):
         
     except Exception as e:
         print(f"❌ Erro: {e}")
-        await interaction.followup.send("❌ Ocorreu um erro. Contate um administrador.", ephemeral=True)
+        await interaction.followup.send("❌ Ocorreu um erro.", ephemeral=True)
+
+# ===============================
+# COMANDOS DE ADMIN - VARIAÇÕES
+# ===============================
+
+@bot.tree.command(name="add_variacao", description="[ADMIN] Adicionar variação a um produto")
+@app_commands.describe(
+    produto_id="ID do produto",
+    nome="Nome da variação (ex: Completo, Apenas Conta)",
+    preco="Preço da variação em R$"
+)
+async def add_variacao(
+    interaction: discord.Interaction,
+    produto_id: str,
+    nome: str,
+    preco: float
+):
+    if interaction.user.id != MEU_ID:
+        await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
+        return
+    
+    if produto_id not in produtos_disponiveis:
+        await interaction.response.send_message(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
+        return
+    
+    if "variacoes" not in produtos_disponiveis[produto_id]:
+        produtos_disponiveis[produto_id]["variacoes"] = []
+    
+    produtos_disponiveis[produto_id]["variacoes"].append({
+        "nome": nome,
+        "preco": preco
+    })
+    salvar_produtos(produtos_disponiveis)
+    
+    await interaction.response.send_message(
+        f"✅ Variação adicionada!\n\n"
+        f"📦 Produto: {produtos_disponiveis[produto_id]['nome']}\n"
+        f"🎮 Opção: {nome}\n"
+        f"💰 Preço: R$ {preco:.2f}",
+        ephemeral=True
+    )
+
+
+@bot.tree.command(name="remover_variacao", description="[ADMIN] Remover variação de um produto")
+@app_commands.describe(
+    produto_id="ID do produto",
+    indice="Número da variação (use /listar_variacoes para ver)"
+)
+async def remover_variacao(
+    interaction: discord.Interaction,
+    produto_id: str,
+    indice: int
+):
+    if interaction.user.id != MEU_ID:
+        await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
+        return
+    
+    if produto_id not in produtos_disponiveis:
+        await interaction.response.send_message(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
+        return
+    
+    variacoes = produtos_disponiveis[produto_id].get("variacoes", [])
+    if indice < 0 or indice >= len(variacoes):
+        await interaction.response.send_message(f"❌ Índice inválido! Use 0 a {len(variacoes)-1}", ephemeral=True)
+        return
+    
+    removida = variacoes.pop(indice)
+    salvar_produtos(produtos_disponiveis)
+    
+    await interaction.response.send_message(
+        f"✅ Variação removida!\n\n"
+        f"📦 Produto: {produtos_disponiveis[produto_id]['nome']}\n"
+        f"🎮 Opção removida: {removida['nome']}\n"
+        f"💰 Preço: R$ {removida['preco']:.2f}",
+        ephemeral=True
+    )
+
+
+@bot.tree.command(name="listar_variacoes", description="[ADMIN] Listar variações de um produto")
+@app_commands.describe(produto_id="ID do produto")
+async def listar_variacoes(interaction: discord.Interaction, produto_id: str):
+    if interaction.user.id != MEU_ID:
+        await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
+        return
+    
+    if produto_id not in produtos_disponiveis:
+        await interaction.response.send_message(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
+        return
+    
+    produto = produtos_disponiveis[produto_id]
+    variacoes = produto.get("variacoes", [])
+    
+    if not variacoes:
+        await interaction.response.send_message(f"📦 **{produto['nome']}**\n\nNenhuma variação cadastrada.", ephemeral=True)
+        return
+    
+    descricao = ""
+    for i, v in enumerate(variacoes):
+        descricao += f"**{i}** - {v['nome']} - R$ {v['preco']:.2f}\n"
+    
+    embed = discord.Embed(
+        title=f"📦 VARIAÇÕES - {produto['nome']}",
+        description=descricao,
+        color=0x2b2d31
+    )
+    embed.set_footer(text="Use /remover_variacao com o índice")
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ===============================
 # COMANDOS DE CLIENTE
@@ -303,11 +504,13 @@ async def listar_produtos(interaction: discord.Interaction):
     
     for key, prod in produtos_disponiveis.items():
         tipo_texto = "Automática" if prod.get('tipo') == 'auto' else "Manual"
+        qtd_variacoes = len(prod.get("variacoes", []))
+        variacoes_texto = f" | {qtd_variacoes} opções" if qtd_variacoes > 0 else ""
         
         embed.add_field(
             name=f"📦 {prod['nome']}",
             value=f"💰 Preço: R$ {prod['preco']:.2f}\n"
-                  f"📝 Entrega: {tipo_texto}\n"
+                  f"📝 Entrega: {tipo_texto}{variacoes_texto}\n"
                   f"🆔 ID: `{key}`",
             inline=False
         )
@@ -329,90 +532,31 @@ async def mostrar_loja(interaction: discord.Interaction):
     
     for key, prod in produtos_disponiveis.items():
         desc_formatada = prod.get('descricao', 'Sem descrição')
+        qtd_variacoes = len(prod.get("variacoes", []))
+        variacoes_texto = f"\n🎮 {qtd_variacoes} opções disponíveis" if qtd_variacoes > 0 else ""
         
         embed.add_field(
             name=f"📦 {prod['nome']}",
-            value=f"{desc_formatada}\n\n💰 Preço: R$ {prod['preco']:.2f}\n🆔 ID: `{key}`",
+            value=f"{desc_formatada}\n\n💰 Preço: R$ {prod['preco']:.2f}{variacoes_texto}\n🆔 ID: `{key}`",
             inline=False
         )
     
-    embed.set_footer(text="M7 STORE - Clique nos botões abaixo para comprar!")
+    embed.set_footer(text="M7 STORE - Use /comprar para adquirir!")
     
-    view = discord.ui.View(timeout=None)
-    
-    for key, prod in produtos_disponiveis.items():
-        button = discord.ui.Button(
-            label=f"🛒 {prod['nome']} - R$ {prod['preco']:.2f}",
-            style=discord.ButtonStyle.success,
-            custom_id=f"loja_comprar_{key}",
-            emoji="🛒"
-        )
-        
-        async def button_callback(interaction: discord.Interaction, produto_id=key):
-            await interaction.response.defer(ephemeral=True)
-            user = interaction.user
-            
-            try:
-                pix_data = criar_pagamento_pix(user.id, produto_id)
-                
-                if not pix_data:
-                    await interaction.followup.send("❌ Erro ao gerar pagamento.", ephemeral=True)
-                    return
-                
-                await log_carrinho_ativo(
-                    user=user,
-                    produto_nome=pix_data['produto'],
-                    valor=pix_data['preco'],
-                    pagamento_id=pix_data.get('payment_id', 'N/A')
-                )
-                
-                embed_pix = discord.Embed(
-                    title="🧾 PAGAMENTO PIX",
-                    description=f"**Produto:** {pix_data['produto']}\n**Valor:** R$ {pix_data['preco']:.2f}",
-                    color=0x00ff88
-                )
-                
-                try:
-                    expiracao = datetime.fromisoformat(pix_data["expiration"].replace("Z", "+00:00"))
-                    tempo_restante = expiracao - datetime.now(expiracao.tzinfo)
-                    minutos = int(tempo_restante.total_seconds() / 60)
-                    embed_pix.add_field(name="⏰ Expira em", value=f"{minutos} minutos", inline=True)
-                except:
-                    embed_pix.add_field(name="⏰ Expira em", value="15 minutos", inline=True)
-                
-                embed_pix.set_footer(text="Você receberá o produto aqui assim que o pagamento for confirmado!")
-                
-                qr_image_data = base64.b64decode(pix_data["qr_code_base64"])
-                copiar_view = CopiarPIXView(pix_data["qr_code"])
-                
-                with BytesIO(qr_image_data) as image_binary:
-                    image_binary.seek(0)
-                    file = discord.File(fp=image_binary, filename="qrcode.png")
-                    await user.send(embed=embed_pix, file=file, view=copiar_view)
-                    
-                await interaction.followup.send("📨 Informações enviadas no seu privado!", ephemeral=True)
-                
-            except Exception as e:
-                print(f"❌ Erro: {e}")
-                await interaction.followup.send("❌ Ocorreu um erro.", ephemeral=True)
-        
-        button.callback = button_callback
-        view.add_item(button)
-    
-    await interaction.response.send_message(embed=embed, view=view)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ===============================
 # COMANDOS PARA CANAIS INDIVIDUAIS
 # ===============================
 
 async def criar_embed_produto(produto_id: str, produto_info: dict):
-    """Cria um embed para o produto com imagem no canto (thumbnail)"""
-    
     imagem_url = produto_info.get('imagem', '')
+    qtd_variacoes = len(produto_info.get("variacoes", []))
+    variacoes_texto = f"\n🎮 {qtd_variacoes} opções disponíveis" if qtd_variacoes > 0 else ""
     
     embed = discord.Embed(
         title=f"{produto_info['nome'].upper()}",
-        description=produto_info.get('descricao', 'Sem descrição'),
+        description=produto_info.get('descricao', 'Sem descrição') + variacoes_texto,
         color=0x2b2d31,
         timestamp=datetime.now()
     )
@@ -425,7 +569,6 @@ async def criar_embed_produto(produto_id: str, produto_info: dict):
     
     embed.set_footer(text="M7 STORE - Clique no botão abaixo para comprar!")
     
-    # Imagem no canto superior direito (thumbnail)
     if imagem_url and imagem_url != "":
         embed.set_thumbnail(url=imagem_url)
     
@@ -433,18 +576,31 @@ async def criar_embed_produto(produto_id: str, produto_info: dict):
 
 
 class ProdutoCompraView(discord.ui.View):
-    def __init__(self, produto_id: str, produto_nome: str):
+    def __init__(self, produto_id: str, produto_nome: str, variacoes: list = None):
         super().__init__(timeout=None)
         self.produto_id = produto_id
         self.produto_nome = produto_nome
+        self.variacoes = variacoes or []
     
     @discord.ui.button(label="COMPRAR AGORA", style=discord.ButtonStyle.success, emoji="🛒")
     async def comprar_agora(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
+        
+        # Se tem variações, mostra o menu
+        if self.variacoes and len(self.variacoes) > 0:
+            view = VariacoesView(self.produto_id, self.produto_nome, self.variacoes)
+            await interaction.followup.send(
+                f"📦 **{self.produto_nome}**\n\nSelecione a opção desejada:",
+                view=view,
+                ephemeral=True
+            )
+            return
+        
         user = interaction.user
         
         try:
-            pix_data = criar_pagamento_pix(user.id, self.produto_id)
+            produto_info = produtos_disponiveis[self.produto_id]
+            pix_data = criar_pagamento_pix_com_preco(user.id, self.produto_id, produto_info["preco"], self.produto_nome)
             
             if not pix_data:
                 await interaction.followup.send("❌ Erro ao gerar pagamento.", ephemeral=True)
@@ -544,7 +700,7 @@ async def configurar_produto(
         mensagem = f"✅ Canal atualizado! #{nome_canal}"
     
     embed = await criar_embed_produto(produto_id, produto_info)
-    view = ProdutoCompraView(produto_id, produto_info['nome'])
+    view = ProdutoCompraView(produto_id, produto_info['nome'], produto_info.get("variacoes", []))
     
     await canal.send(embed=embed, view=view)
     await interaction.followup.send(mensagem, ephemeral=True)
@@ -605,7 +761,7 @@ async def atualizar_produto(
                     await msg.delete()
             
             embed = await criar_embed_produto(produto_id, produto)
-            view = ProdutoCompraView(produto_id, produto['nome'])
+            view = ProdutoCompraView(produto_id, produto['nome'], produto.get("variacoes", []))
             await channel.send(embed=embed, view=view)
             canal_atualizado = True
             break
@@ -638,8 +794,9 @@ async def sincronizar_canal(interaction: discord.Interaction, produto_id: str):
                 if msg.author == bot.user:
                     await msg.delete()
             
-            embed = await criar_embed_produto(produto_id, produtos_disponiveis[produto_id])
-            view = ProdutoCompraView(produto_id, produtos_disponiveis[produto_id]['nome'])
+            produto = produtos_disponiveis[produto_id]
+            embed = await criar_embed_produto(produto_id, produto)
+            view = ProdutoCompraView(produto_id, produto['nome'], produto.get("variacoes", []))
             await channel.send(embed=embed, view=view)
             canal_atualizado = True
             break
@@ -673,7 +830,7 @@ async def editar_imagem(interaction: discord.Interaction, produto_id: str, url_i
     )
 
 # ===============================
-# COMANDOS DE ADMIN
+# COMANDOS DE ADMIN (GERENCIAMENTO BASE)
 # ===============================
 
 @bot.tree.command(name="criar_produto", description="[ADMIN] Criar um novo produto")
@@ -709,14 +866,15 @@ async def criar_produto(
         "preco": preco,
         "descricao": descricao,
         "tipo": tipo,
-        "imagem": ""
+        "imagem": "",
+        "variacoes": []
     }
     salvar_produtos(produtos_disponiveis)
     
     tipo_texto = "🤖 Entrega automática" if tipo == "auto" else "👨‍💼 Entrega manual"
     
     await interaction.response.send_message(
-        f"✅ Produto criado!\n\n📦 ID: `{id}`\n📝 Nome: {nome}\n💰 Preço: R$ {preco:.2f}\n🎮 Tipo: {tipo_texto}\n\n💡 Use `/configurar_produto {id} {id}` para criar o canal!",
+        f"✅ Produto criado!\n\n📦 ID: `{id}`\n📝 Nome: {nome}\n💰 Preço: R$ {preco:.2f}\n🎮 Tipo: {tipo_texto}\n\n💡 Use `/add_variacao` para adicionar opções!\n💡 Use `/configurar_produto {id} {id}` para criar o canal!",
         ephemeral=True
     )
 
@@ -824,7 +982,7 @@ async def entregar_produto(
             await interaction.followup.send("❌ Usuário não encontrado.", ephemeral=True)
             return
         
-        if produit_id not in produtos_disponiveis:
+        if produto_id not in produtos_disponiveis:
             await interaction.followup.send(f"❌ Produto não encontrado!", ephemeral=True)
             return
         
