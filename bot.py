@@ -26,6 +26,7 @@ WEBHOOK_URL = os.environ.get(
 
 ARQUIVO_PRODUTO = "produto.txt"
 ARQUIVO_PRODUTOS_JSON = "produtos.json"
+ARQUIVO_ESTOQUE_JSON = "estoque.json"
 
 if not os.path.exists(ARQUIVO_PRODUTO):
     print("❌ produto.txt não encontrado")
@@ -42,6 +43,36 @@ MEU_ID = 1439411460378726530
 CARGO_ADMIN = 1472666559049633952
 
 carrinhos_ativos = {}
+
+# ===============================
+# SISTEMA DE ESTOQUE
+# ===============================
+
+def carregar_estoque():
+    """Carrega o estoque do arquivo JSON"""
+    if os.path.exists(ARQUIVO_ESTOQUE_JSON):
+        with open(ARQUIVO_ESTOQUE_JSON, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    else:
+        estoque_padrao = {
+            "rockstar": {
+                "itens": [],
+                "variacoes": {}
+            },
+            "cs": {
+                "itens": [],
+                "variacoes": {}
+            }
+        }
+        salvar_estoque(estoque_padrao)
+        return estoque_padrao
+
+def salvar_estoque(estoque):
+    with open(ARQUIVO_ESTOQUE_JSON, 'w', encoding='utf-8') as f:
+        json.dump(estoque, f, indent=2, ensure_ascii=False)
+
+estoque_disponivel = carregar_estoque()
+print(f"📦 Estoque carregado")
 
 # ===============================
 # SISTEMA DE GERENCIAMENTO DE PRODUTOS
@@ -120,6 +151,42 @@ def criar_pagamento_pix_com_preco(user_id, produto_id, preco, nome_produto):
     return None
 
 # ===============================
+# FUNÇÃO PARA ENTREGAR PRODUTO DO ESTOQUE
+# ===============================
+
+def entregar_do_estoque(produto_id, variacao_nome=None):
+    """Pega um item do estoque e remove"""
+    
+    if produto_id not in estoque_disponivel:
+        return None
+    
+    if variacao_nome and variacao_nome in estoque_disponivel[produto_id].get("variacoes", {}):
+        itens = estoque_disponivel[produto_id]["variacoes"][variacao_nome]
+        if itens and len(itens) > 0:
+            item = itens.pop(0)
+            salvar_estoque(estoque_disponivel)
+            return item
+    
+    itens = estoque_disponivel[produto_id].get("itens", [])
+    if itens and len(itens) > 0:
+        item = itens.pop(0)
+        salvar_estoque(estoque_disponivel)
+        return item
+    
+    return None
+
+def verificar_estoque(produto_id, variacao_nome=None):
+    """Verifica se tem estoque disponível"""
+    
+    if produto_id not in estoque_disponivel:
+        return 0
+    
+    if variacao_nome and variacao_nome in estoque_disponivel[produto_id].get("variacoes", {}):
+        return len(estoque_disponivel[produto_id]["variacoes"][variacao_nome])
+    
+    return len(estoque_disponivel[produto_id].get("itens", []))
+
+# ===============================
 # FUNÇÕES DE LOG
 # ===============================
 async def log_carrinho_ativo(user, produto_nome, valor, pagamento_id):
@@ -146,7 +213,8 @@ async def log_carrinho_ativo(user, produto_nome, valor, pagamento_id):
         carrinhos_ativos[str(pagamento_id)] = {
             "canal": canal.id,
             "mensagem_id": mensagem.id,
-            "usuario": user.id
+            "usuario": user.id,
+            "produto": produto_nome
         }
         
         return mensagem
@@ -328,6 +396,12 @@ async def comprar(interaction: discord.Interaction, produto: str = "cs"):
         
         produto_info = produtos_disponiveis[produto]
         
+        # Verificar estoque
+        qtd_estoque = verificar_estoque(produto)
+        if qtd_estoque == 0 and produto_info.get("tipo") == "auto":
+            await interaction.followup.send("❌ **Produto esgotado!** Aguarde reposição.", ephemeral=True)
+            return
+        
         if produto_info.get("variacoes") and len(produto_info["variacoes"]) > 0:
             view = VariacoesView(produto, produto_info['nome'], produto_info["variacoes"])
             await interaction.followup.send(
@@ -379,6 +453,120 @@ async def comprar(interaction: discord.Interaction, produto: str = "cs"):
     except Exception as e:
         print(f"❌ Erro: {e}")
         await interaction.followup.send("❌ Ocorreu um erro.", ephemeral=True)
+
+# ===============================
+# COMANDOS DE ESTOQUE
+# ===============================
+
+@bot.tree.command(name="add_estoque", description="[ADMIN] Adicionar itens ao estoque")
+@app_commands.describe(
+    produto_id="ID do produto",
+    conteudo="Conteúdo (ex: login:senha)",
+    variacao="Nome da variação (opcional)"
+)
+async def add_estoque(
+    interaction: discord.Interaction,
+    produto_id: str,
+    conteudo: str,
+    variacao: str = None
+):
+    if interaction.user.id != MEU_ID:
+        await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
+        return
+    
+    if produto_id not in produtos_disponiveis:
+        await interaction.response.send_message(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
+        return
+    
+    if produto_id not in estoque_disponivel:
+        estoque_disponivel[produto_id] = {"itens": [], "variacoes": {}}
+    
+    if variacao:
+        if variacao not in estoque_disponivel[produto_id]["variacoes"]:
+            estoque_disponivel[produto_id]["variacoes"][variacao] = []
+        estoque_disponivel[produto_id]["variacoes"][variacao].append(conteudo)
+    else:
+        estoque_disponivel[produto_id]["itens"].append(conteudo)
+    
+    salvar_estoque(estoque_disponivel)
+    
+    await interaction.response.send_message(
+        f"✅ **Item adicionado ao estoque!**\n\n"
+        f"📦 Produto: {produtos_disponiveis[produto_id]['nome']}\n"
+        f"🔐 Conteúdo: `{conteudo}`\n"
+        f"📊 Total em estoque: {verificar_estoque(produto_id, variacao)}",
+        ephemeral=True
+    )
+
+
+@bot.tree.command(name="remover_estoque", description="[ADMIN] Remover item do estoque")
+@app_commands.describe(
+    produto_id="ID do produto",
+    indice="Índice do item (use /ver_estoque para ver)"
+)
+async def remover_estoque(
+    interaction: discord.Interaction,
+    produto_id: str,
+    indice: int
+):
+    if interaction.user.id != MEU_ID:
+        await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
+        return
+    
+    if produto_id not in estoque_disponivel:
+        await interaction.response.send_message(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
+        return
+    
+    itens = estoque_disponivel[produto_id].get("itens", [])
+    if indice < 0 or indice >= len(itens):
+        await interaction.response.send_message(f"❌ Índice inválido! Use 0 a {len(itens)-1}", ephemeral=True)
+        return
+    
+    removido = itens.pop(indice)
+    salvar_estoque(estoque_disponivel)
+    
+    await interaction.response.send_message(
+        f"✅ **Item removido do estoque!**\n\n"
+        f"📦 Produto: {produtos_disponiveis[produto_id]['nome']}\n"
+        f"🔐 Item removido: `{removido}`",
+        ephemeral=True
+    )
+
+
+@bot.tree.command(name="ver_estoque", description="[ADMIN] Ver estoque disponível")
+@app_commands.describe(produto_id="ID do produto")
+async def ver_estoque(interaction: discord.Interaction, produto_id: str):
+    if interaction.user.id != MEU_ID:
+        await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
+        return
+    
+    if produto_id not in produtos_disponiveis:
+        await interaction.response.send_message(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
+        return
+    
+    produto = produtos_disponiveis[produto_id]
+    
+    if produto_id not in estoque_disponivel:
+        estoque_disponivel[produto_id] = {"itens": [], "variacoes": {}}
+    
+    itens = estoque_disponivel[produto_id].get("itens", [])
+    
+    if not itens:
+        await interaction.response.send_message(f"📦 **{produto['nome']}**\n\nEstoque vazio! Use `/add_estoque` para adicionar.", ephemeral=True)
+        return
+    
+    descricao = ""
+    for i, item in enumerate(itens):
+        descricao += f"**{i}** - `{item}`\n"
+    
+    embed = discord.Embed(
+        title=f"📦 ESTOQUE - {produto['nome']}",
+        description=descricao,
+        color=0x2b2d31
+    )
+    embed.set_footer(text=f"Total: {len(itens)} itens | Use /remover_estoque com o índice")
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ===============================
 # COMANDOS DE ADMIN - VARIAÇÕES
@@ -546,12 +734,14 @@ async def listar_produtos(interaction: discord.Interaction):
     for key, prod in produtos_disponiveis.items():
         tipo_texto = "Automática" if prod.get('tipo') == 'auto' else "Manual"
         qtd_variacoes = len(prod.get("variacoes", []))
+        qtd_estoque = verificar_estoque(key)
+        estoque_texto = f" | {qtd_estoque} em estoque" if prod.get('tipo') == 'auto' else ""
         variacoes_texto = f" | {qtd_variacoes} opções" if qtd_variacoes > 0 else ""
         
         embed.add_field(
             name=f"📦 {prod['nome']}",
             value=f"💰 Preço: R$ {prod['preco']:.2f}\n"
-                  f"📝 Entrega: {tipo_texto}{variacoes_texto}\n"
+                  f"📝 Entrega: {tipo_texto}{variacoes_texto}{estoque_texto}\n"
                   f"🆔 ID: `{key}`",
             inline=False
         )
@@ -574,11 +764,13 @@ async def mostrar_loja(interaction: discord.Interaction):
     for key, prod in produtos_disponiveis.items():
         desc_formatada = prod.get('descricao', 'Sem descrição')
         qtd_variacoes = len(prod.get("variacoes", []))
+        qtd_estoque = verificar_estoque(key)
+        estoque_texto = f"\n📊 Estoque: {qtd_estoque} unidades" if prod.get('tipo') == 'auto' else ""
         variacoes_texto = f"\n🎮 {qtd_variacoes} opções disponíveis" if qtd_variacoes > 0 else ""
         
         embed.add_field(
             name=f"📦 {prod['nome']}",
-            value=f"{desc_formatada}\n\n💰 Preço: R$ {prod['preco']:.2f}{variacoes_texto}\n🆔 ID: `{key}`",
+            value=f"{desc_formatada}\n\n💰 Preço: R$ {prod['preco']:.2f}{variacoes_texto}{estoque_texto}\n🆔 ID: `{key}`",
             inline=False
         )
     
@@ -593,11 +785,13 @@ async def mostrar_loja(interaction: discord.Interaction):
 async def criar_embed_produto(produto_id: str, produto_info: dict):
     imagem_url = produto_info.get('imagem', '')
     qtd_variacoes = len(produto_info.get("variacoes", []))
+    qtd_estoque = verificar_estoque(produto_id)
+    estoque_texto = f"\n📊 Estoque: {qtd_estoque} unidades" if produto_info.get('tipo') == 'auto' else ""
     variacoes_texto = f"\n🎮 {qtd_variacoes} opções disponíveis" if qtd_variacoes > 0 else ""
     
     embed = discord.Embed(
         title=f"{produto_info['nome'].upper()}",
-        description=produto_info.get('descricao', 'Sem descrição') + variacoes_texto,
+        description=produto_info.get('descricao', 'Sem descrição') + variacoes_texto + estoque_texto,
         color=0x2b2d31,
         timestamp=datetime.now()
     )
@@ -640,6 +834,13 @@ class ProdutoCompraView(discord.ui.View):
         
         try:
             produto_info = produtos_disponiveis[self.produto_id]
+            
+            # Verificar estoque
+            qtd_estoque = verificar_estoque(self.produto_id)
+            if qtd_estoque == 0 and produto_info.get("tipo") == "auto":
+                await interaction.followup.send("❌ **Produto esgotado!** Aguarde reposição.", ephemeral=True)
+                return
+            
             pix_data = criar_pagamento_pix_com_preco(user.id, self.produto_id, produto_info["preco"], self.produto_nome)
             
             if not pix_data:
@@ -911,10 +1112,15 @@ async def criar_produto(
     }
     salvar_produtos(produtos_disponiveis)
     
+    # Inicializar estoque para o novo produto
+    if id not in estoque_disponivel:
+        estoque_disponivel[id] = {"itens": [], "variacoes": {}}
+        salvar_estoque(estoque_disponivel)
+    
     tipo_texto = "🤖 Entrega automática" if tipo == "auto" else "👨‍💼 Entrega manual"
     
     await interaction.response.send_message(
-        f"✅ Produto criado!\n\n📦 ID: `{id}`\n📝 Nome: {nome}\n💰 Preço: R$ {preco:.2f}\n🎮 Tipo: {tipo_texto}\n\n💡 Use `/add_variacao` para adicionar opções!\n💡 Use `/configurar_produto {id} {id}` para criar o canal!",
+        f"✅ Produto criado!\n\n📦 ID: `{id}`\n📝 Nome: {nome}\n💰 Preço: R$ {preco:.2f}\n🎮 Tipo: {tipo_texto}\n\n💡 Use `/add_estoque` para adicionar itens!\n💡 Use `/add_variacao` para adicionar opções!\n💡 Use `/configurar_produto {id} {id}` para criar o canal!",
         ephemeral=True
     )
 
@@ -1117,24 +1323,34 @@ def webhook():
                             if user and produto_id in produtos_disponiveis:
                                 produto_info = produtos_disponiveis[produto_id]
                                 
+                                # Para produtos automáticos, entregar do estoque
                                 if produto_info.get("tipo") == "auto":
-                                    if produto_id == "cs":
+                                    item = entregar_do_estoque(produto_id)
+                                    
+                                    if item:
                                         asyncio.run_coroutine_threadsafe(
                                             user.send(
-                                                "✅ Pagamento confirmado!\nAqui está seu produto:",
-                                                file=discord.File(ARQUIVO_PRODUTO)
+                                                f"✅ **Pagamento confirmado!**\n\n"
+                                                f"📦 **{produto_info['nome']}**\n\n"
+                                                f"🔐 **Seu produto:**\n```{item}```\n\n"
+                                                "✅ Obrigado pela preferência!"
                                             ), bot.loop
                                         )
                                     else:
                                         asyncio.run_coroutine_threadsafe(
                                             user.send(
-                                                f"✅ Pagamento confirmado!\n\n📦 {produto_info['nome']}\n🔐 Conteúdo será enviado em breve."
+                                                f"✅ **Pagamento confirmado!**\n\n"
+                                                f"📦 **{produto_info['nome']}**\n\n"
+                                                f"⚠️ **Estoque esgotado!** Seu pagamento foi registrado. Um administrador irá entregar em breve."
                                             ), bot.loop
                                         )
                                 else:
+                                    # Produto manual
                                     asyncio.run_coroutine_threadsafe(
                                         user.send(
-                                            f"✅ Pagamento aprovado!\n\n📦 {produto_info['nome']}\n👨‍💼 Um administrador irá entregar seu produto em breve."
+                                            f"✅ **Pagamento aprovado!**\n\n"
+                                            f"📦 **{produto_info['nome']}**\n\n"
+                                            f"👨‍💼 Um administrador irá entregar seu produto em breve."
                                         ), bot.loop
                                     )
                                 
