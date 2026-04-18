@@ -295,7 +295,7 @@ async def comprar(interaction: discord.Interaction, produto: str = "cs"):
 @bot.tree.command(name="produtos", description="Ver todos os produtos disponíveis")
 async def listar_produtos(interaction: discord.Interaction):
     embed = discord.Embed(
-        title="🛒 NOSSOS PRODUTOS",
+        title="🛒 M7 STORE - PRODUTOS",
         description="Use `/comprar [id]` para adquirir qualquer produto!",
         color=0x2b2d31,
         timestamp=datetime.now()
@@ -312,7 +312,7 @@ async def listar_produtos(interaction: discord.Interaction):
             inline=False
         )
     
-    embed.set_footer(text="Legend Store")
+    embed.set_footer(text="M7 STORE")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ===============================
@@ -321,7 +321,7 @@ async def listar_produtos(interaction: discord.Interaction):
 @bot.tree.command(name="loja", description="🛒 Ver todos os produtos da loja")
 async def mostrar_loja(interaction: discord.Interaction):
     embed = discord.Embed(
-        title="LEGEND STORE",
+        title="M7 STORE",
         description="Selecione um produto abaixo",
         color=0x2b2d31,
         timestamp=datetime.now()
@@ -336,7 +336,7 @@ async def mostrar_loja(interaction: discord.Interaction):
             inline=False
         )
     
-    embed.set_footer(text="Legend Store - Clique nos botões abaixo para comprar!")
+    embed.set_footer(text="M7 STORE - Clique nos botões abaixo para comprar!")
     
     view = discord.ui.View(timeout=None)
     
@@ -402,11 +402,11 @@ async def mostrar_loja(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=view)
 
 # ===============================
-# COMANDOS PARA CANAIS INDIVIDUAIS - VISUAL LIMPO
+# COMANDOS PARA CANAIS INDIVIDUAIS
 # ===============================
 
 async def criar_embed_produto(produto_id: str, produto_info: dict):
-    """Cria um embed limpo e profissional para o produto (estilo Legend Store)"""
+    """Cria um embed para o produto com imagem no canto (thumbnail)"""
     
     imagem_url = produto_info.get('imagem', '')
     
@@ -423,8 +423,9 @@ async def criar_embed_produto(produto_id: str, produto_info: dict):
         inline=False
     )
     
-    embed.set_footer(text="Legend Store - Clique no botão abaixo para comprar!")
+    embed.set_footer(text="M7 STORE - Clique no botão abaixo para comprar!")
     
+    # Imagem no canto superior direito (thumbnail)
     if imagem_url and imagem_url != "":
         embed.set_thumbnail(url=imagem_url)
     
@@ -823,7 +824,7 @@ async def entregar_produto(
             await interaction.followup.send("❌ Usuário não encontrado.", ephemeral=True)
             return
         
-        if produto_id not in produtos_disponiveis:
+        if produit_id not in produtos_disponiveis:
             await interaction.followup.send(f"❌ Produto não encontrado!", ephemeral=True)
             return
         
@@ -856,7 +857,7 @@ async def entregar_produto(
         await interaction.followup.send(f"❌ Erro: {e}", ephemeral=True)
 
 # ===============================
-# BACKUP E RESTAURAR (OPCIONAL)
+# BACKUP
 # ===============================
 
 @bot.tree.command(name="backup", description="[ADMIN] Fazer backup dos produtos")
@@ -882,7 +883,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "🤖 Bot está online e funcionando!", 200
+    return "🤖 M7 STORE - Bot está online e funcionando!", 200
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
