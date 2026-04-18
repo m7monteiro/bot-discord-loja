@@ -28,9 +28,11 @@ ARQUIVO_PRODUTO = "produto.txt"
 ARQUIVO_PRODUTOS_JSON = "produtos.json"
 ARQUIVO_ESTOQUE_JSON = "estoque.json"
 
-if not os.path.exists(ARQUIVO_PRODUTO):
-    print("❌ produto.txt não encontrado")
-    sys.exit()
+# Só verifica produto.txt se existir (opcional)
+if os.path.exists(ARQUIVO_PRODUTO):
+    print("📄 produto.txt encontrado")
+else:
+    print("⚠️ produto.txt não encontrado (opcional)")
 
 GUILD_ID = 1472114509068898367
 CARGO_MEMBRO = 1472666559049633952
@@ -53,18 +55,9 @@ def carregar_estoque():
         with open(ARQUIVO_ESTOQUE_JSON, 'r', encoding='utf-8') as f:
             return json.load(f)
     else:
-        estoque_padrao = {
-            "rockstar": {
-                "itens": [],
-                "variacoes": {}
-            },
-            "cs": {
-                "itens": [],
-                "variacoes": {}
-            }
-        }
-        salvar_estoque(estoque_padrao)
-        return estoque_padrao
+        estoque_vazio = {}
+        salvar_estoque(estoque_vazio)
+        return estoque_vazio
 
 def salvar_estoque(estoque):
     with open(ARQUIVO_ESTOQUE_JSON, 'w', encoding='utf-8') as f:
@@ -82,26 +75,9 @@ def carregar_produtos():
         with open(ARQUIVO_PRODUTOS_JSON, 'r', encoding='utf-8') as f:
             return json.load(f)
     else:
-        produtos_padrao = {
-            "cs": {
-                "nome": "Pack Counter Strike",
-                "preco": 24.99,
-                "descricao": "✅ Pack completo do Counter Strike\n✅ Acesso vitalício\n✅ Garantia de 30 dias\n✅ Suporte 24/7",
-                "tipo": "auto",
-                "imagem": "",
-                "variacoes": []
-            },
-            "rockstar": {
-                "nome": "Conta Rockstar",
-                "preco": 2.60,
-                "descricao": "✅ Rockstar nova e nunca utilizada\n✅ Conta Rockstar 100% segura\n✅ Acesso total (Full Acesso)\n✅ Ideal para unban do CFX Global e HWID do FiveM\n✅ Já com licença ativa para jogar FiveM",
-                "tipo": "manual",
-                "imagem": "",
-                "variacoes": []
-            }
-        }
-        salvar_produtos(produtos_padrao)
-        return produtos_padrao
+        produtos_vazio = {}
+        salvar_produtos(produtos_vazio)
+        return produtos_vazio
 
 def salvar_produtos(produtos):
     with open(ARQUIVO_PRODUTOS_JSON, 'w', encoding='utf-8') as f:
@@ -380,7 +356,7 @@ class VariacoesView(discord.ui.View):
 # ===============================
 @bot.tree.command(name="comprar", description="Comprar um produto da loja")
 @app_commands.describe(produto="ID do produto (use /produtos para ver os IDs)")
-async def comprar(interaction: discord.Interaction, produto: str = "cs"):
+async def comprar(interaction: discord.Interaction, produto: str):
     await interaction.response.defer(ephemeral=True)
     user = interaction.user
     
@@ -723,6 +699,10 @@ async def remover_variacao(
 # ===============================
 @bot.tree.command(name="produtos", description="Ver todos os produtos disponíveis")
 async def listar_produtos(interaction: discord.Interaction):
+    if not produtos_disponiveis:
+        await interaction.response.send_message("📦 **Nenhum produto cadastrado ainda!**\n\nUse `/criar_produto` para adicionar.", ephemeral=True)
+        return
+    
     embed = discord.Embed(
         title="🛒 M7 STORE - PRODUTOS",
         description="Use `/comprar [id]` para adquirir qualquer produto!",
@@ -753,6 +733,10 @@ async def listar_produtos(interaction: discord.Interaction):
 # ===============================
 @bot.tree.command(name="loja", description="🛒 Ver todos os produtos da loja")
 async def mostrar_loja(interaction: discord.Interaction):
+    if not produtos_disponiveis:
+        await interaction.response.send_message("📦 **Nenhum produto cadastrado ainda!**\n\nUse `/criar_produto` para adicionar.", ephemeral=True)
+        return
+    
     embed = discord.Embed(
         title="M7 STORE",
         description="Selecione um produto abaixo",
@@ -886,8 +870,8 @@ class ProdutoCompraView(discord.ui.View):
 
 @bot.tree.command(name="configurar_produto", description="[ADMIN] Criar/atualizar canal de um produto")
 @app_commands.describe(
-    produto_id="ID do produto (ex: rockstar, cs)",
-    nome_canal="Nome do canal (ex: rockstar, cs-vip)"
+    produto_id="ID do produto",
+    nome_canal="Nome do canal"
 )
 async def configurar_produto(
     interaction: discord.Interaction,
