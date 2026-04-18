@@ -392,7 +392,7 @@ async def comprar(interaction: discord.Interaction, produto: str = "cs"):
 )
 async def add_variacao(
     interaction: discord.Interaction,
-    produit_id: str,
+    produto_id: str,
     nome: str,
     preco: float
 ):
