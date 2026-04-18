@@ -44,7 +44,7 @@ MEU_ID = 1439411460378726530
 CARGO_ADMIN = 1472666559049633952
 
 # Dicionário para armazenar mensagens de carrinho
-carrinhos_ativos = {}  # {pagamento_id: {"canal": canal, "mensagem_id": id, "usuario": user_id}}
+carrinhos_ativos = {}
 
 # ===============================
 # SISTEMA DE GERENCIAMENTO DE PRODUTOS
@@ -56,7 +56,6 @@ def carregar_produtos():
         with open(ARQUIVO_PRODUTOS_JSON, 'r', encoding='utf-8') as f:
             return json.load(f)
     else:
-        # Produtos padrão
         produtos_padrao = {
             "cs": {
                 "nome": "Pack Counter Strike", 
@@ -68,7 +67,7 @@ def carregar_produtos():
             "rockstar": {
                 "nome": "Conta Rockstar", 
                 "preco": 4.99, 
-                "descricao": "✅ Conta 100% nova\n✅ Acesso vitalício\n✅ Licenciada\n✅ Sem banimentos\n\n📌 Contas Rockstar Oday são ideais para contornar banimentos globais ou HWID. Elas não possuem nenhum tipo de banimento anterior.", 
+                "descricao": "✅ Conta 100% nova\n✅ Acesso vitalício\n✅ Licenciada\n✅ Sem banimentos\n\n📌 Contas Rockstar Oday são ideais para contornar banimentos globais ou HWID.", 
                 "tipo": "manual",
                 "imagem": ""
             }
@@ -81,7 +80,6 @@ def salvar_produtos(produtos):
     with open(ARQUIVO_PRODUTOS_JSON, 'w', encoding='utf-8') as f:
         json.dump(produtos, f, indent=2, ensure_ascii=False)
 
-# Carregar produtos na memória
 produtos_disponiveis = carregar_produtos()
 print(f"📦 {len(produtos_disponiveis)} produtos carregados")
 
@@ -131,7 +129,7 @@ def criar_pagamento_pix(user_id, produto_id):
     return None
 
 # ===============================
-# FUNÇÃO PARA LOG DE CARRINHOS
+# FUNÇÕES DE LOG
 # ===============================
 async def log_carrinho_ativo(user, produto_nome, valor, pagamento_id):
     try:
@@ -166,9 +164,6 @@ async def log_carrinho_ativo(user, produto_nome, valor, pagamento_id):
         print(f"❌ Erro log carrinho: {e}")
         return None
 
-# ===============================
-# FUNÇÃO PARA LOG DE PAGAMENTO CONFIRMADO
-# ===============================
 async def log_pagamento_confirmado(user, produto_nome, valor, pagamento_id):
     try:
         canal_pagos = bot.get_channel(CANAL_PAGOS)
@@ -190,7 +185,6 @@ async def log_pagamento_confirmado(user, produto_nome, valor, pagamento_id):
         
         await canal_pagos.send(embed=embed)
         
-        # Remover do carrinho se existir
         if str(pagamento_id) in carrinhos_ativos:
             dados = carrinhos_ativos[str(pagamento_id)]
             canal_carrinho = bot.get_channel(dados["canal"])
@@ -242,7 +236,7 @@ class CopiarPIXView(discord.ui.View):
         )
 
 # ===============================
-# COMANDO DE COMPRA GENÉRICO
+# COMANDO DE COMPRA
 # ===============================
 @bot.tree.command(name="comprar", description="Comprar um produto da loja")
 @app_commands.describe(produto="ID do produto (use /produtos para ver os IDs)")
@@ -252,25 +246,20 @@ async def comprar(interaction: discord.Interaction, produto: str = "cs"):
     user = interaction.user
     
     try:
-        # Verificar se o produto existe
         if produto not in produtos_disponiveis:
             produtos_lista = "\n".join([f"• `{pid}` - {p['nome']}" for pid, p in produtos_disponiveis.items()])
             await interaction.followup.send(
-                f"❌ **Produto não encontrado!**\n\n"
-                f"📦 **Produtos disponíveis:**\n{produtos_lista}\n\n"
-                f"💡 Use `/produtos` para mais detalhes.",
+                f"❌ **Produto não encontrado!**\n\n📦 **Produtos disponíveis:**\n{produtos_lista}",
                 ephemeral=True
             )
             return
         
-        # Gerar PIX
         pix_data = criar_pagamento_pix(user.id, produto)
         
         if not pix_data:
             await interaction.followup.send("❌ **Erro ao gerar pagamento.** Tente novamente mais tarde.", ephemeral=True)
             return
         
-        # Log no canal de carrinhos
         await log_carrinho_ativo(
             user=user,
             produto_nome=pix_data['produto'],
@@ -278,7 +267,6 @@ async def comprar(interaction: discord.Interaction, produto: str = "cs"):
             pagamento_id=pix_data.get('payment_id', 'N/A')
         )
         
-        # Embed do PIX
         embed_pix = discord.Embed(
             title="🧾 **PAGAMENTO PIX**",
             description=f"**Produto:** {pix_data['produto']}\n**Valor:** R$ {pix_data['preco']:.2f}",
@@ -334,16 +322,14 @@ async def listar_produtos(interaction: discord.Interaction):
             inline=False
         )
     
-    embed.set_footer(text="Legend Store • Clique no botão abaixo para comprar!")
+    embed.set_footer(text="Legend Store")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ===============================
-# COMANDO /LOJA - CARD BONITO DINÂMICO
+# COMANDO /LOJA - VISUAL PROFISSIONAL
 # ===============================
-
 @bot.tree.command(name="loja", description="🛒 Ver todos os produtos da loja em cards bonitos")
 async def mostrar_loja(interaction: discord.Interaction):
-    """Mostra a loja com todos os produtos em cards bonitos"""
     
     embed = discord.Embed(
         title="🛍️ **LEGEND STORE**",
@@ -352,12 +338,10 @@ async def mostrar_loja(interaction: discord.Interaction):
         timestamp=datetime.now()
     )
     
-    # Adiciona cada produto como um field no embed
     for key, prod in produtos_disponiveis.items():
         tipo_emoji = "🤖" if prod.get('tipo') == 'auto' else "👨‍💼"
         tipo_texto = "Entrega Automática" if prod.get('tipo') == 'auto' else "Entrega Manual"
         
-        # Descrição formatada com checkmarks
         desc_formatada = prod.get('descricao', 'Sem descrição')
         
         embed.add_field(
@@ -365,14 +349,12 @@ async def mostrar_loja(interaction: discord.Interaction):
             value=f"```{desc_formatada}```\n"
                   f"💰 **Preço:** `R$ {prod['preco']:.2f}`\n"
                   f"🎮 **Entrega:** {tipo_emoji} {tipo_texto}\n"
-                  f"🆔 **ID:** `{key}`\n"
-                  f"╰┈➤ **Clique no botão abaixo para comprar!**",
+                  f"🆔 **ID:** `{key}`",
             inline=False
         )
     
-    embed.set_footer(text="Legend Store • Segurança e Qualidade • PIX na hora!")
+    embed.set_footer(text="Legend Store • Clique nos botões abaixo para comprar!")
     
-    # Criar view com botões para cada produto
     view = discord.ui.View(timeout=None)
     
     for key, prod in produtos_disponiveis.items():
@@ -385,14 +367,13 @@ async def mostrar_loja(interaction: discord.Interaction):
         
         async def button_callback(interaction: discord.Interaction, produto_id=key):
             await interaction.response.defer(ephemeral=True)
-            
             user = interaction.user
             
             try:
                 pix_data = criar_pagamento_pix(user.id, produto_id)
                 
                 if not pix_data:
-                    await interaction.followup.send("❌ **Erro ao gerar pagamento.** Tente novamente mais tarde.", ephemeral=True)
+                    await interaction.followup.send("❌ **Erro ao gerar pagamento.**", ephemeral=True)
                     return
                 
                 await log_carrinho_ativo(
@@ -430,41 +411,39 @@ async def mostrar_loja(interaction: discord.Interaction):
                 
             except Exception as e:
                 print(f"❌ Erro: {e}")
-                await interaction.followup.send("❌ **Ocorreu um erro.** Contate um administrador.", ephemeral=True)
+                await interaction.followup.send("❌ **Ocorreu um erro.**", ephemeral=True)
         
         button.callback = button_callback
         view.add_item(button)
     
     await interaction.response.send_message(embed=embed, view=view)
 
-
 # ===============================
-# COMANDOS PARA CANAIS INDIVIDUAIS DE PRODUTOS
+# COMANDOS PARA CANAIS INDIVIDUAIS - VISUAL PROFISSIONAL
 # ===============================
 
 async def criar_embed_produto(produto_id: str, produto_info: dict):
-    """Cria um embed bonito para o produto"""
+    """Cria um embed bonito e profissional para o produto"""
     
-    # Usar imagem personalizada ou padrão
     imagem_url = produto_info.get('imagem', '')
     
     embed = discord.Embed(
         title=f"🎮 **{produto_info['nome'].upper()}**",
-        description=produto_info.get('descricao', 'Sem descrição'),
-        color=0x5865F2,
+        description=f"```{produto_info.get('descricao', 'Sem descrição')}```",
+        color=0x00ff88,
         timestamp=datetime.now()
     )
     
-    # Adiciona o preço
+    # Preço em destaque
     embed.add_field(
-        name="💰 **PREÇO**",
+        name="💎 **PREÇO PROMOCIONAL**",
         value=f"```R$ {produto_info['preco']:.2f}```",
         inline=False
     )
     
-    # Adiciona informações de entrega
-    tipo_emoji = "🤖" if produto_info.get('tipo') == 'auto' else "👨‍💼"
-    tipo_texto = "Entrega Automática" if produto_info.get('tipo') == 'auto' else "Entrega Manual (Administrador)"
+    # Entrega
+    tipo_emoji = "⚡" if produto_info.get('tipo') == 'auto' else "👨‍💼"
+    tipo_texto = "Entrega Automática (Instantânea)" if produto_info.get('tipo') == 'auto' else "Entrega Manual (Administrador)"
     
     embed.add_field(
         name="📦 **ENTREGA**",
@@ -472,14 +451,21 @@ async def criar_embed_produto(produto_id: str, produto_info: dict):
         inline=True
     )
     
-    # Adiciona garantia
+    # Garantia
     embed.add_field(
-        name="✅ **GARANTIA**",
-        value="30 dias de garantia",
+        name="🛡️ **GARANTIA**",
+        value="✅ 30 dias de garantia total",
         inline=True
     )
     
-    embed.set_footer(text="Legend Store • Clique no botão abaixo para comprar!")
+    # Suporte
+    embed.add_field(
+        name="🎧 **SUPORTE**",
+        value="✅ 24/7 via ticket",
+        inline=True
+    )
+    
+    embed.set_footer(text="Legend Store • Segurança e Qualidade • PIX na hora!")
     
     if imagem_url and imagem_url != "":
         embed.set_thumbnail(url=imagem_url)
@@ -496,14 +482,13 @@ class ProdutoCompraView(discord.ui.View):
     @discord.ui.button(label="🛒 COMPRAR AGORA", style=discord.ButtonStyle.success, emoji="🛒", custom_id="comprar_btn")
     async def comprar_agora(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
-        
         user = interaction.user
         
         try:
             pix_data = criar_pagamento_pix(user.id, self.produto_id)
             
             if not pix_data:
-                await interaction.followup.send("❌ **Erro ao gerar pagamento.** Tente novamente mais tarde.", ephemeral=True)
+                await interaction.followup.send("❌ **Erro ao gerar pagamento.**", ephemeral=True)
                 return
             
             await log_carrinho_ativo(
@@ -541,7 +526,7 @@ class ProdutoCompraView(discord.ui.View):
             
         except Exception as e:
             print(f"❌ Erro: {e}")
-            await interaction.followup.send("❌ **Ocorreu um erro.** Contate um administrador.", ephemeral=True)
+            await interaction.followup.send("❌ **Ocorreu um erro.**", ephemeral=True)
 
 
 @bot.tree.command(name="configurar_produto", description="[ADMIN] Criar/atualizar canal de um produto")
@@ -560,23 +545,19 @@ async def configurar_produto(
     
     await interaction.response.defer(ephemeral=True)
     
-    # Verificar se o produto existe
     if produto_id not in produtos_disponiveis:
         await interaction.followup.send(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
         return
     
     produto_info = produtos_disponiveis[produto_id]
     
-    # Procurar canal existente
     canal_existente = None
     for channel in interaction.guild.channels:
         if channel.name == nome_canal:
             canal_existente = channel
             break
     
-    # Criar ou obter o canal
     if not canal_existente:
-        # Criar nova categoria "PRODUTOS" se não existir
         categoria = None
         for cat in interaction.guild.categories:
             if cat.name == "🛒 PRODUTOS":
@@ -586,63 +567,28 @@ async def configurar_produto(
         if not categoria:
             categoria = await interaction.guild.create_category("🛒 PRODUTOS")
         
-        # Criar o canal
         canal = await interaction.guild.create_text_channel(
             nome_canal,
             category=categoria,
             topic=f"Venda de {produto_info['nome']} - Preço: R$ {produto_info['preco']:.2f}"
         )
         
-        # Definir permissões
         await canal.set_permissions(interaction.guild.default_role, send_messages=False)
         await canal.set_permissions(interaction.guild.me, send_messages=True, read_messages=True)
         
         mensagem = f"✅ **Canal criado!** #{nome_canal}"
     else:
         canal = canal_existente
-        # Limpar mensagens antigas
         async for msg in canal.history(limit=50):
             if msg.author == bot.user:
                 await msg.delete()
         mensagem = f"✅ **Canal atualizado!** #{nome_canal}"
     
-    # Criar embed e view
     embed = await criar_embed_produto(produto_id, produto_info)
     view = ProdutoCompraView(produto_id, produto_info['nome'])
     
-    # Enviar mensagem no canal
     await canal.send(embed=embed, view=view)
-    
     await interaction.followup.send(mensagem, ephemeral=True)
-
-
-@bot.tree.command(name="atualizar_canais", description="[ADMIN] Atualizar todos os canais de produtos")
-async def atualizar_canais(interaction: discord.Interaction):
-    if interaction.user.id != MEU_ID:
-        await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
-        return
-    
-    await interaction.response.defer(ephemeral=True)
-    
-    atualizados = 0
-    
-    for produto_id, produto_info in produtos_disponiveis.items():
-        # Procurar canal pelo nome do produto
-        for channel in interaction.guild.channels:
-            if channel.name == produto_id or channel.name == produto_id.lower():
-                # Limpar mensagens antigas do bot
-                async for msg in channel.history(limit=50):
-                    if msg.author == bot.user:
-                        await msg.delete()
-                
-                # Enviar nova mensagem
-                embed = await criar_embed_produto(produto_id, produto_info)
-                view = ProdutoCompraView(produto_id, produto_info['nome'])
-                await channel.send(embed=embed, view=view)
-                atualizados += 1
-                break
-    
-    await interaction.followup.send(f"✅ **{atualizados} canais atualizados!**", ephemeral=True)
 
 
 @bot.tree.command(name="atualizar_produto", description="[ADMIN] Atualizar produto e canal automaticamente")
@@ -674,7 +620,6 @@ async def atualizar_produto(
     produto = produtos_disponiveis[produto_id]
     mensagem = f"✅ **Produto atualizado!**\n\n"
     
-    # Atualizar dados
     if novo_nome:
         mensagem += f"📝 **Nome:** {produto['nome']} → {novo_nome}\n"
         produto["nome"] = novo_nome
@@ -693,7 +638,6 @@ async def atualizar_produto(
     
     salvar_produtos(produtos_disponiveis)
     
-    # ATUALIZAR O CANAL AUTOMATICAMENTE
     canal_atualizado = False
     for channel in interaction.guild.channels:
         if channel.name == produto_id or channel.name == produto_id.lower():
@@ -742,9 +686,9 @@ async def sincronizar_canal(interaction: discord.Interaction, produto_id: str):
             break
     
     if canal_atualizado:
-        await interaction.followup.send(f"✅ **Canal #{produto_id} sincronizado com os dados mais recentes!**", ephemeral=True)
+        await interaction.followup.send(f"✅ **Canal #{produto_id} sincronizado!**", ephemeral=True)
     else:
-        await interaction.followup.send(f"❌ **Canal para {produto_id} não encontrado!** Use `/configurar_produto` primeiro.", ephemeral=True)
+        await interaction.followup.send(f"❌ **Canal para {produto_id} não encontrado!**", ephemeral=True)
 
 
 @bot.tree.command(name="editar_imagem", description="[ADMIN] Mudar a imagem do produto")
@@ -761,28 +705,25 @@ async def editar_imagem(interaction: discord.Interaction, produto_id: str, url_i
         await interaction.response.send_message(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
         return
     
-    # Salvar URL da imagem no produto
     produtos_disponiveis[produto_id]["imagem"] = url_imagem
     salvar_produtos(produtos_disponiveis)
     
     await interaction.response.send_message(
-        f"✅ **Imagem atualizada para {produtos_disponiveis[produto_id]['nome']}!**\n"
-        f"🖼️ Nova imagem: {url_imagem}\n\n"
-        f"💡 Use `/sincronizar_canal {produto_id}` para aplicar a mudança no canal.",
+        f"✅ **Imagem atualizada!**\n🖼️ Nova imagem: {url_imagem}\n\n💡 Use `/sincronizar_canal {produto_id}` para aplicar.",
         ephemeral=True
     )
 
 # ===============================
-# COMANDOS DE ADMIN (GERENCIAMENTO)
+# COMANDOS DE ADMIN
 # ===============================
 
 @bot.tree.command(name="criar_produto", description="[ADMIN] Criar um novo produto")
 @app_commands.describe(
-    id="ID único do produto (ex: vip, cs, minecraft)",
+    id="ID único do produto",
     nome="Nome do produto",
     preco="Preço em R$",
-    descricao="Descrição do produto (use ✅ para listar itens)",
-    tipo="Tipo: auto (entrega automática) ou manual (você entrega)"
+    descricao="Descrição do produto",
+    tipo="Tipo: auto ou manual"
 )
 async def criar_produto(
     interaction: discord.Interaction,
@@ -813,24 +754,17 @@ async def criar_produto(
     }
     salvar_produtos(produtos_disponiveis)
     
-    tipo_texto = "🤖 Entrega automática" if tipo == "auto" else "👨‍💼 Entrega manual (você precisa entregar)"
+    tipo_texto = "🤖 Entrega automática" if tipo == "auto" else "👨‍💼 Entrega manual"
     
     await interaction.response.send_message(
-        f"✅ **Produto criado com sucesso!**\n\n"
-        f"📦 **ID:** `{id}`\n"
-        f"📝 **Nome:** {nome}\n"
-        f"💰 **Preço:** R$ {preco:.2f}\n"
-        f"📄 **Descrição:** {descricao}\n"
-        f"🎮 **Tipo:** {tipo_texto}\n\n"
-        f"💡 Use `/configurar_produto {id} {id}` para criar o canal!\n"
-        f"💡 Use `/loja` para ver o card bonito do produto!",
+        f"✅ **Produto criado!**\n\n📦 **ID:** `{id}`\n📝 **Nome:** {nome}\n💰 **Preço:** R$ {preco:.2f}\n🎮 **Tipo:** {tipo_texto}\n\n💡 Use `/configurar_produto {id} {id}` para criar o canal!",
         ephemeral=True
     )
 
 
 @bot.tree.command(name="editar_preco", description="[ADMIN] Alterar preço de um produto")
 @app_commands.describe(
-    produto_id="ID do produto (use /produtos para ver os IDs)",
+    produto_id="ID do produto",
     novo_preco="Novo preço em R$"
 )
 async def editar_preco(interaction: discord.Interaction, produto_id: str, novo_preco: float):
@@ -839,7 +773,7 @@ async def editar_preco(interaction: discord.Interaction, produto_id: str, novo_p
         return
     
     if produto_id not in produtos_disponiveis:
-        await interaction.response.send_message(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
+        await interaction.response.send_message(f"❌ Produto não encontrado!", ephemeral=True)
         return
     
     produto = produtos_disponiveis[produto_id]
@@ -848,16 +782,12 @@ async def editar_preco(interaction: discord.Interaction, produto_id: str, novo_p
     salvar_produtos(produtos_disponiveis)
     
     await interaction.response.send_message(
-        f"✅ **Preço atualizado!**\n\n"
-        f"📦 **Produto:** {produto['nome']}\n"
-        f"📉 **Preço antigo:** R$ {preco_antigo:.2f}\n"
-        f"📈 **Novo preço:** R$ {novo_preco:.2f}\n\n"
-        f"💡 Use `/atualizar_produto` para atualizar tudo de uma vez!",
+        f"✅ **Preço atualizado!**\n📦 **Produto:** {produto['nome']}\n📉 **Antigo:** R$ {preco_antigo:.2f}\n📈 **Novo:** R$ {novo_preco:.2f}",
         ephemeral=True
     )
 
 
-@bot.tree.command(name="editar_produto", description="[ADMIN] Alterar nome/descrição de um produto")
+@bot.tree.command(name="editar_produto", description="[ADMIN] Alterar nome/descrição")
 @app_commands.describe(
     produto_id="ID do produto",
     novo_nome="Novo nome (opcional)",
@@ -874,53 +804,46 @@ async def editar_produto(
         return
     
     if produto_id not in produtos_disponiveis:
-        await interaction.response.send_message(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
+        await interaction.response.send_message(f"❌ Produto não encontrado!", ephemeral=True)
         return
     
     produto = produtos_disponiveis[produto_id]
     mensagem = f"✅ **Produto atualizado!**\n\n📦 **ID:** `{produto_id}`\n"
     
     if novo_nome:
-        nome_antigo = produto["nome"]
+        mensagem += f"📝 **Nome:** {produto['nome']} → {novo_nome}\n"
         produto["nome"] = novo_nome
-        mensagem += f"📝 **Nome antigo:** {nome_antigo}\n📝 **Novo nome:** {novo_nome}\n"
     
     if nova_descricao:
+        mensagem += f"📄 **Descrição atualizada**\n"
         produto["descricao"] = nova_descricao
-        mensagem += f"📄 **Nova descrição:** {nova_descricao}\n"
     
     salvar_produtos(produtos_disponiveis)
-    mensagem += f"\n💡 Use `/atualizar_produto` para atualizar tudo de uma vez!"
     await interaction.response.send_message(mensagem, ephemeral=True)
 
 
 @bot.tree.command(name="remover_produto", description="[ADMIN] Remover um produto")
-@app_commands.describe(produto_id="ID do produto a ser removido")
+@app_commands.describe(produto_id="ID do produto")
 async def remover_produto(interaction: discord.Interaction, produto_id: str):
     if interaction.user.id != MEU_ID:
         await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
         return
     
     if produto_id not in produtos_disponiveis:
-        await interaction.response.send_message(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
+        await interaction.response.send_message(f"❌ Produto não encontrado!", ephemeral=True)
         return
     
     produto = produtos_disponiveis.pop(produto_id)
     salvar_produtos(produtos_disponiveis)
     
-    await interaction.response.send_message(
-        f"✅ **Produto removido!**\n\n"
-        f"📦 **Produto removido:** {produto['nome']}\n"
-        f"🆔 **ID:** `{produto_id}`",
-        ephemeral=True
-    )
+    await interaction.response.send_message(f"✅ **Produto removido!**\n📦 **Removido:** {produto['nome']}", ephemeral=True)
 
 
-@bot.tree.command(name="entregar", description="[ADMIN] Entregar produto manual para o cliente")
+@bot.tree.command(name="entregar", description="[ADMIN] Entregar produto manual")
 @app_commands.describe(
-    usuario="ID do usuário que comprou",
+    usuario="ID do usuário",
     produto_id="ID do produto",
-    conteudo="O conteúdo a ser entregue (conta, código, etc)"
+    conteudo="Conteúdo a entregar"
 )
 async def entregar_produto(
     interaction: discord.Interaction, 
@@ -943,7 +866,7 @@ async def entregar_produto(
             return
         
         if produto_id not in produtos_disponiveis:
-            await interaction.followup.send(f"❌ **Produto `{produto_id}` não encontrado!**", ephemeral=True)
+            await interaction.followup.send(f"❌ **Produto não encontrado!**", ephemeral=True)
             return
         
         produto = produtos_disponiveis[produto_id]
@@ -959,7 +882,7 @@ async def entregar_produto(
         canal_pagos = bot.get_channel(CANAL_PAGOS)
         if canal_pagos:
             embed = discord.Embed(
-                title="📦 **PRODUTO ENTREGUE MANUALMENTE**",
+                title="📦 **PRODUTO ENTREGUE**",
                 color=0x3498db,
                 timestamp=datetime.now()
             )
@@ -967,14 +890,12 @@ async def entregar_produto(
             embed.add_field(name="📦 **Produto**", value=produto['nome'], inline=True)
             embed.add_field(name="🔐 **Conteúdo**", value=f"||{conteudo}||", inline=False)
             embed.set_footer(text=f"Entregue por: {interaction.user.name}")
-            
             await canal_pagos.send(embed=embed)
         
     except ValueError:
         await interaction.followup.send("❌ **ID inválido.**", ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"❌ **Erro:** {e}", ephemeral=True)
-
 
 # ===============================
 # WEBHOOK
@@ -1019,7 +940,6 @@ def webhook():
                             if user and produto_id in produtos_disponiveis:
                                 produto_info = produtos_disponiveis[produto_id]
                                 
-                                # Entregar automaticamente se for produto automático
                                 if produto_info.get("tipo") == "auto":
                                     if produto_id == "cs":
                                         asyncio.run_coroutine_threadsafe(
@@ -1029,21 +949,15 @@ def webhook():
                                             ), bot.loop
                                         )
                                     else:
-                                        # Para outros produtos automáticos, você pode personalizar
                                         asyncio.run_coroutine_threadsafe(
                                             user.send(
-                                                f"✅ **Pagamento confirmado!**\n\n"
-                                                f"📦 **{produto_info['nome']}**\n"
-                                                f"🔐 Conteúdo do produto será enviado em breve."
+                                                f"✅ **Pagamento confirmado!**\n\n📦 **{produto_info['nome']}**\n🔐 Conteúdo será enviado em breve."
                                             ), bot.loop
                                         )
                                 else:
-                                    # Produto manual
                                     asyncio.run_coroutine_threadsafe(
                                         user.send(
-                                            f"✅ **Pagamento aprovado!**\n\n"
-                                            f"📦 **{produto_info['nome']}**\n"
-                                            f"👨‍💼 Um administrador irá entregar seu produto em breve."
+                                            f"✅ **Pagamento aprovado!**\n\n📦 **{produto_info['nome']}**\n👨‍💼 Um administrador irá entregar seu produto em breve."
                                         ), bot.loop
                                     )
                                 
