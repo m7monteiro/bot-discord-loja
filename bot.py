@@ -44,7 +44,7 @@ CARGO_ADMIN = 1472666559049633952
 carrinhos_ativos = {}
 
 # ===============================
-# SISTEMA DE GERENCIAMENTO DE PRODUTOS COM VARIAÇÕES
+# SISTEMA DE GERENCIAMENTO DE PRODUTOS
 # ===============================
 
 def carregar_produtos():
@@ -52,6 +52,7 @@ def carregar_produtos():
         with open(ARQUIVO_PRODUTOS_JSON, 'r', encoding='utf-8') as f:
             return json.load(f)
     else:
+        # PRODUTOS PADRÃO - SEM VARIAÇÕES PRÉ-DEFINIDAS
         produtos_padrao = {
             "cs": {
                 "nome": "Pack Counter Strike",
@@ -67,10 +68,7 @@ def carregar_produtos():
                 "descricao": "✅ Rockstar nova e nunca utilizada\n✅ Conta Rockstar 100% segura\n✅ Acesso total (Full Acesso)\n✅ Ideal para unban do CFX Global e HWID do FiveM\n✅ Já com licença ativa para jogar FiveM",
                 "tipo": "manual",
                 "imagem": "",
-                "variacoes": [
-                    {"nome": "Completo (com GTA)", "preco": 4.99},
-                    {"nome": "Apenas Conta", "preco": 2.60}
-                ]
+                "variacoes": []  # VAZIO - VOCÊ CRIA PELO DISCORD
             }
         }
         salvar_produtos(produtos_padrao)
@@ -236,17 +234,21 @@ class VariacoesView(discord.ui.View):
         self.produto_id = produto_id
         self.produto_nome = produto_nome
         
-        # Criar menu de seleção
-        select = discord.ui.Select(
-            placeholder="📦 Selecione uma opção...",
-            options=[
+        # Criar menu de seleção DINÂMICO baseado nas variações que você criou
+        options = []
+        for i, v in enumerate(variacoes):
+            options.append(
                 discord.SelectOption(
-                    label=v["nome"],
+                    label=v["nome"][:100],  # Limite de 100 caracteres
                     description=f"R$ {v['preco']:.2f}",
                     emoji="🎮" if i == 0 else "⭐",
                     value=str(i)
-                ) for i, v in enumerate(variacoes)
-            ]
+                )
+            )
+        
+        select = discord.ui.Select(
+            placeholder="📦 Selecione uma opção...",
+            options=options
         )
         select.callback = self.selecionar_opcao
         self.add_item(select)
@@ -383,13 +385,13 @@ async def comprar(interaction: discord.Interaction, produto: str = "cs"):
         await interaction.followup.send("❌ Ocorreu um erro.", ephemeral=True)
 
 # ===============================
-# COMANDOS DE ADMIN - VARIAÇÕES
+# COMANDOS DE ADMIN - VARIAÇÕES (VOCÊ CRIA TUDO)
 # ===============================
 
 @bot.tree.command(name="add_variacao", description="[ADMIN] Adicionar variação a um produto")
 @app_commands.describe(
     produto_id="ID do produto",
-    nome="Nome da variação (ex: Completo, Apenas Conta)",
+    nome="Nome da variação (ex: Completo, Apenas Conta, Premium)",
     preco="Preço da variação em R$"
 )
 async def add_variacao(
@@ -474,7 +476,7 @@ async def listar_variacoes(interaction: discord.Interaction, produto_id: str):
     variacoes = produto.get("variacoes", [])
     
     if not variacoes:
-        await interaction.response.send_message(f"📦 **{produto['nome']}**\n\nNenhuma variação cadastrada.", ephemeral=True)
+        await interaction.response.send_message(f"📦 **{produto['nome']}**\n\nNenhuma variação cadastrada.\n\nUse `/add_variacao` para criar!", ephemeral=True)
         return
     
     descricao = ""
@@ -867,7 +869,7 @@ async def criar_produto(
         "descricao": descricao,
         "tipo": tipo,
         "imagem": "",
-        "variacoes": []
+        "variacoes": []  # SEMPRE VAZIO - VOCÊ CRIA DEPOIS
     }
     salvar_produtos(produtos_disponiveis)
     
