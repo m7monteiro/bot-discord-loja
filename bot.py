@@ -52,7 +52,6 @@ def carregar_produtos():
         with open(ARQUIVO_PRODUTOS_JSON, 'r', encoding='utf-8') as f:
             return json.load(f)
     else:
-        # PRODUTOS PADRÃO - SEM VARIAÇÕES PRÉ-DEFINIDAS
         produtos_padrao = {
             "cs": {
                 "nome": "Pack Counter Strike",
@@ -68,7 +67,7 @@ def carregar_produtos():
                 "descricao": "✅ Rockstar nova e nunca utilizada\n✅ Conta Rockstar 100% segura\n✅ Acesso total (Full Acesso)\n✅ Ideal para unban do CFX Global e HWID do FiveM\n✅ Já com licença ativa para jogar FiveM",
                 "tipo": "manual",
                 "imagem": "",
-                "variacoes": []  # VAZIO - VOCÊ CRIA PELO DISCORD
+                "variacoes": []
             }
         }
         salvar_produtos(produtos_padrao)
@@ -234,12 +233,11 @@ class VariacoesView(discord.ui.View):
         self.produto_id = produto_id
         self.produto_nome = produto_nome
         
-        # Criar menu de seleção DINÂMICO baseado nas variações que você criou
         options = []
         for i, v in enumerate(variacoes):
             options.append(
                 discord.SelectOption(
-                    label=v["nome"][:100],  # Limite de 100 caracteres
+                    label=v["nome"][:100],
                     description=f"R$ {v['preco']:.2f}",
                     emoji="🎮" if i == 0 else "⭐",
                     value=str(i)
@@ -330,7 +328,6 @@ async def comprar(interaction: discord.Interaction, produto: str = "cs"):
         
         produto_info = produtos_disponiveis[produto]
         
-        # Se tem variações, mostra o menu
         if produto_info.get("variacoes") and len(produto_info["variacoes"]) > 0:
             view = VariacoesView(produto, produto_info['nome'], produto_info["variacoes"])
             await interaction.followup.send(
@@ -340,7 +337,6 @@ async def comprar(interaction: discord.Interaction, produto: str = "cs"):
             )
             return
         
-        # Sem variações, compra normal
         pix_data = criar_pagamento_pix_com_preco(user.id, produto, produto_info["preco"], produto_info['nome'])
         
         if not pix_data:
@@ -385,7 +381,7 @@ async def comprar(interaction: discord.Interaction, produto: str = "cs"):
         await interaction.followup.send("❌ Ocorreu um erro.", ephemeral=True)
 
 # ===============================
-# COMANDOS DE ADMIN - VARIAÇÕES (VOCÊ CRIA TUDO)
+# COMANDOS DE ADMIN - VARIAÇÕES
 # ===============================
 
 @bot.tree.command(name="add_variacao", description="[ADMIN] Adicionar variação a um produto")
@@ -396,7 +392,7 @@ async def comprar(interaction: discord.Interaction, produto: str = "cs"):
 )
 async def add_variacao(
     interaction: discord.Interaction,
-    produto_id: str,
+    produit_id: str,
     nome: str,
     preco: float
 ):
@@ -424,6 +420,81 @@ async def add_variacao(
         f"💰 Preço: R$ {preco:.2f}",
         ephemeral=True
     )
+
+
+@bot.tree.command(name="listar_variacoes", description="[ADMIN] Listar variações de um produto")
+@app_commands.describe(produto_id="ID do produto")
+async def listar_variacoes(interaction: discord.Interaction, produto_id: str):
+    if interaction.user.id != MEU_ID:
+        await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
+        return
+    
+    if produto_id not in produtos_disponiveis:
+        await interaction.response.send_message(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
+        return
+    
+    produto = produtos_disponiveis[produto_id]
+    variacoes = produto.get("variacoes", [])
+    
+    if not variacoes:
+        await interaction.response.send_message(f"📦 **{produto['nome']}**\n\nNenhuma variação cadastrada.\n\nUse `/add_variacao` para criar!", ephemeral=True)
+        return
+    
+    descricao = ""
+    for i, v in enumerate(variacoes):
+        descricao += f"**{i}** - {v['nome']} - R$ {v['preco']:.2f}\n"
+    
+    embed = discord.Embed(
+        title=f"📦 VARIAÇÕES - {produto['nome']}",
+        description=descricao,
+        color=0x2b2d31
+    )
+    embed.set_footer(text="Use /editar_variacao ou /remover_variacao com o índice")
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@bot.tree.command(name="editar_variacao", description="[ADMIN] Editar nome ou preço de uma variação")
+@app_commands.describe(
+    produto_id="ID do produto",
+    indice="Índice da variação (use /listar_variacoes para ver)",
+    novo_nome="Novo nome da variação (opcional)",
+    novo_preco="Novo preço da variação (opcional)"
+)
+async def editar_variacao(
+    interaction: discord.Interaction,
+    produto_id: str,
+    indice: int,
+    novo_nome: str = None,
+    novo_preco: float = None
+):
+    if interaction.user.id != MEU_ID:
+        await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
+        return
+    
+    if produto_id not in produtos_disponiveis:
+        await interaction.response.send_message(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
+        return
+    
+    variacoes = produtos_disponiveis[produto_id].get("variacoes", [])
+    if indice < 0 or indice >= len(variacoes):
+        await interaction.response.send_message(f"❌ Índice inválido! Use 0 a {len(variacoes)-1}", ephemeral=True)
+        return
+    
+    variacao = variacoes[indice]
+    mensagem = f"✅ Variação editada!\n\n📦 Produto: {produtos_disponiveis[produto_id]['nome']}\n"
+    
+    if novo_nome:
+        mensagem += f"📝 Nome: {variacao['nome']} → {novo_nome}\n"
+        variacao["nome"] = novo_nome
+    
+    if novo_preco:
+        mensagem += f"💰 Preço: R$ {variacao['preco']:.2f} → R$ {novo_preco:.2f}\n"
+        variacao["preco"] = novo_preco
+    
+    salvar_produtos(produtos_disponiveis)
+    
+    await interaction.response.send_message(mensagem, ephemeral=True)
 
 
 @bot.tree.command(name="remover_variacao", description="[ADMIN] Remover variação de um produto")
@@ -459,38 +530,6 @@ async def remover_variacao(
         f"💰 Preço: R$ {removida['preco']:.2f}",
         ephemeral=True
     )
-
-
-@bot.tree.command(name="listar_variacoes", description="[ADMIN] Listar variações de um produto")
-@app_commands.describe(produto_id="ID do produto")
-async def listar_variacoes(interaction: discord.Interaction, produto_id: str):
-    if interaction.user.id != MEU_ID:
-        await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
-        return
-    
-    if produto_id not in produtos_disponiveis:
-        await interaction.response.send_message(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
-        return
-    
-    produto = produtos_disponiveis[produto_id]
-    variacoes = produto.get("variacoes", [])
-    
-    if not variacoes:
-        await interaction.response.send_message(f"📦 **{produto['nome']}**\n\nNenhuma variação cadastrada.\n\nUse `/add_variacao` para criar!", ephemeral=True)
-        return
-    
-    descricao = ""
-    for i, v in enumerate(variacoes):
-        descricao += f"**{i}** - {v['nome']} - R$ {v['preco']:.2f}\n"
-    
-    embed = discord.Embed(
-        title=f"📦 VARIAÇÕES - {produto['nome']}",
-        description=descricao,
-        color=0x2b2d31
-    )
-    embed.set_footer(text="Use /remover_variacao com o índice")
-    
-    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ===============================
 # COMANDOS DE CLIENTE
@@ -588,7 +627,6 @@ class ProdutoCompraView(discord.ui.View):
     async def comprar_agora(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
         
-        # Se tem variações, mostra o menu
         if self.variacoes and len(self.variacoes) > 0:
             view = VariacoesView(self.produto_id, self.produto_nome, self.variacoes)
             await interaction.followup.send(
@@ -869,7 +907,7 @@ async def criar_produto(
         "descricao": descricao,
         "tipo": tipo,
         "imagem": "",
-        "variacoes": []  # SEMPRE VAZIO - VOCÊ CRIA DEPOIS
+        "variacoes": []
     }
     salvar_produtos(produtos_disponiveis)
     
