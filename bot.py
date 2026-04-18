@@ -1294,85 +1294,122 @@ def home():
     return "🤖 M7 STORE - Bot está online e funcionando!", 200
 
 @app.route("/webhook", methods=["POST"])
+@app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.json
-    print("📩 Webhook recebido:", data)
+    print("📩 Webhook recebido (JSON):", data)
+    
+    # Algumas vezes o Mercado Pago envia como form, não JSON
+    if not data:
+        data = request.form.to_dict()
+        print("📩 Webhook recebido (FORM):", data)
     
     try:
+        # Verificar diferentes formatos que o Mercado Pago pode enviar
+        payment_id = None
+        
+        # Formato 1: {"data": {"id": "123"}}
         if data and "data" in data and "id" in data["data"]:
             payment_id = data["data"]["id"]
-            payment_response = sdk.payment().get(payment_id)
+        # Formato 2: {"id": "123"}
+        elif data and "id" in data:
+            payment_id = data["id"]
+        # Formato 3: parâmetro na URL
+        else:
+            payment_id = request.args.get('id')
+        
+        if not payment_id:
+            print("⚠️ Nenhum payment_id encontrado no webhook")
+            return "OK", 200
+        
+        print(f"💰 Payment ID encontrado: {payment_id}")
+        
+        # Buscar informações do pagamento
+        payment_response = sdk.payment().get(payment_id)
+        print(f"📦 Resposta do MP: {payment_response}")
+        
+        if payment_response["status"] == 200:
+            payment = payment_response["response"]
+            print(f"✅ Status do pagamento: {payment.get('status')}")
             
-            if payment_response["status"] == 200:
-                payment = payment_response["response"]
+            if payment["status"] == "approved":
+                ref = payment.get("external_reference", "")
+                print(f"🔗 External reference: {ref}")
                 
-                if payment["status"] == "approved":
-                    ref = payment.get("external_reference", "")
-                    if ref:
-                        partes = ref.split('_')
-                        if len(partes) >= 2:
-                            produto_id = partes[0]
-                            user_id = int(partes[1])
-                            
-                            if user_id == MEU_ID:
-                                return "OK", 200
-                            
-                            user = bot.get_user(user_id)
-                            if not user:
+                if ref:
+                    partes = ref.split('_')
+                    if len(partes) >= 2:
+                        produto_id = partes[0]
+                        user_id = int(partes[1])
+                        
+                        print(f"📦 Produto ID: {produto_id}")
+                        print(f"👤 User ID: {user_id}")
+                        
+                        if user_id == MEU_ID:
+                            print("⚠️ Pagamento do próprio dono, ignorando")
+                            return "OK", 200
+                        
+                        # Buscar usuário
+                        user = bot.get_user(user_id)
+                        if not user:
+                            try:
                                 future = asyncio.run_coroutine_threadsafe(
                                     bot.fetch_user(user_id), bot.loop
                                 )
                                 user = future.result(timeout=5)
+                                print(f"👤 Usuário encontrado: {user}")
+                            except Exception as e:
+                                print(f"❌ Erro ao buscar usuário: {e}")
+                        
+                        if user and produto_id in produtos_disponiveis:
+                            produto_info = produtos_disponiveis[produto_id]
+                            print(f"📦 Produto: {produto_info['nome']} - Tipo: {produto_info.get('tipo')}")
                             
-                            if user and produto_id in produtos_disponiveis:
-                                produto_info = produtos_disponiveis[produto_id]
+                            if produto_info.get("tipo") == "auto":
+                                item = entregar_do_estoque(produto_id)
                                 
-                                # Para produtos automáticos, entregar do estoque
-                                if produto_info.get("tipo") == "auto":
-                                    item = entregar_do_estoque(produto_id)
-                                    
-                                    if item:
-                                        asyncio.run_coroutine_threadsafe(
-                                            user.send(
-                                                f"✅ **Pagamento confirmado!**\n\n"
-                                                f"📦 **{produto_info['nome']}**\n\n"
-                                                f"🔐 **Seu produto:**\n```{item}```\n\n"
-                                                "✅ Obrigado pela preferência!"
-                                            ), bot.loop
-                                        )
-                                        print(f"🎉 Produto automático entregue: {item}")
-                                    else:
-                                        asyncio.run_coroutine_threadsafe(
-                                            user.send(
-                                                f"✅ **Pagamento confirmado!**\n\n"
-                                                f"📦 **{produto_info['nome']}**\n\n"
-                                                f"⚠️ **Estoque esgotado!** Seu pagamento foi registrado. Um administrador irá entregar em breve."
-                                            ), bot.loop
-                                        )
-                                        print(f"⚠️ Estoque vazio para {produto_id}")
-                                else:
-                                    # Produto manual
+                                if item:
                                     asyncio.run_coroutine_threadsafe(
                                         user.send(
-                                            f"✅ **Pagamento aprovado!**\n\n"
+                                            f"✅ **Pagamento confirmado!**\n\n"
                                             f"📦 **{produto_info['nome']}**\n\n"
-                                            f"👨‍💼 Um administrador irá entregar seu produto em breve.\n\n"
-                                            f"🆔 Seu pedido: `{payment_id}`"
+                                            f"🔐 **Seu produto:**\n```{item}```\n\n"
+                                            "✅ Obrigado pela preferência!"
                                         ), bot.loop
                                     )
-                                    print(f"📦 Produto manual - aguardando entrega: {produto_id}")
-                                
+                                    print(f"🎉 Produto automático entregue: {item}")
+                                else:
+                                    asyncio.run_coroutine_threadsafe(
+                                        user.send(
+                                            f"✅ **Pagamento confirmado!**\n\n"
+                                            f"📦 **{produto_info['nome']}**\n\n"
+                                            f"⚠️ **Estoque esgotado!** Seu pagamento foi registrado. Um administrador irá entregar em breve."
+                                        ), bot.loop
+                                    )
+                                    print(f"⚠️ Estoque vazio para {produto_id}")
+                            else:
                                 asyncio.run_coroutine_threadsafe(
-                                    log_pagamento_confirmado(user, produto_info["nome"], produto_info["preco"], payment_id),
-                                    bot.loop
+                                    user.send(
+                                        f"✅ **Pagamento aprovado!**\n\n"
+                                        f"📦 **{produto_info['nome']}**\n\n"
+                                        f"👨‍💼 Um administrador irá entregar seu produto em breve.\n\n"
+                                        f"🆔 Seu pedido: `{payment_id}`"
+                                    ), bot.loop
                                 )
+                                print(f"📦 Produto manual - aguardando entrega: {produto_id}")
+                            
+                            asyncio.run_coroutine_threadsafe(
+                                log_pagamento_confirmado(user, produto_info["nome"], produto_info["preco"], payment_id),
+                                bot.loop
+                            )
+                        else:
+                            print(f"❌ Usuário ou produto não encontrado")
     except Exception as e:
-        print(f"❌ Erro webhook: {e}")
+        print(f"❌ Erro no webhook: {e}")
         import traceback
         traceback.print_exc()
     
     return "OK", 200
-
 # ===============================
 # START
 # ===============================
