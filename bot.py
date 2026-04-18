@@ -49,7 +49,6 @@ carrinhos_ativos = {}
 # ===============================
 
 def carregar_estoque():
-    """Carrega o estoque do arquivo JSON"""
     if os.path.exists(ARQUIVO_ESTOQUE_JSON):
         with open(ARQUIVO_ESTOQUE_JSON, 'r', encoding='utf-8') as f:
             return json.load(f)
@@ -1202,17 +1201,17 @@ async def remover_produto(interaction: discord.Interaction, produto_id: str):
     await interaction.response.send_message(f"✅ Produto removido!\n📦 Removido: {produto['nome']}", ephemeral=True)
 
 
-@bot.tree.command(name="entregar", description="[ADMIN] Entregar produto manual")
+@bot.tree.command(name="entregar", description="[ADMIN] Entregar produto manual do estoque")
 @app_commands.describe(
     usuario="ID do usuário",
     produto_id="ID do produto",
-    conteudo="Conteúdo a entregar"
+    indice="Índice do item no estoque (opcional, use /ver_estoque para ver)"
 )
 async def entregar_produto(
     interaction: discord.Interaction, 
     usuario: str, 
     produto_id: str,
-    conteudo: str
+    indice: int = -1
 ):
     if interaction.user.id != MEU_ID:
         await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
@@ -1232,15 +1231,36 @@ async def entregar_produto(
             await interaction.followup.send(f"❌ Produto não encontrado!", ephemeral=True)
             return
         
+        # Verificar estoque
+        if produto_id not in estoque_disponivel:
+            estoque_disponivel[produto_id] = {"itens": [], "variacoes": {}}
+        
+        itens = estoque_disponivel[produto_id].get("itens", [])
+        
+        if not itens:
+            await interaction.followup.send(f"❌ **Estoque vazio para {produtos_disponiveis[produto_id]['nome']}!**\n\nUse `/add_estoque` para adicionar itens.", ephemeral=True)
+            return
+        
+        # Se índice não foi especificado, pega o primeiro
+        if indice == -1:
+            item = itens.pop(0)
+        else:
+            if indice < 0 or indice >= len(itens):
+                await interaction.followup.send(f"❌ Índice inválido! Use 0 a {len(itens)-1} ou /ver_estoque para ver os índices.", ephemeral=True)
+                return
+            item = itens.pop(indice)
+        
+        salvar_estoque(estoque_disponivel)
+        
         produto = produtos_disponiveis[produto_id]
         
         await user.send(
-            f"🎮 Sua {produto['nome']} chegou!\n\n"
-            f"```{conteudo}```\n\n"
+            f"🎮 **Sua {produto['nome']} chegou!**\n\n"
+            f"```{item}```\n\n"
             "✅ Obrigado pela preferência!"
         )
         
-        await interaction.followup.send(f"✅ {produto['nome']} entregue para {user.name}!", ephemeral=True)
+        await interaction.followup.send(f"✅ **{produto['nome']} entregue para {user.name}!**\n🔐 Item: `{item}`\n📊 Restam {len(estoque_disponivel[produto_id].get('itens', []))} itens em estoque.", ephemeral=True)
         
         canal_pagos = bot.get_channel(CANAL_PAGOS)
         if canal_pagos:
@@ -1251,7 +1271,7 @@ async def entregar_produto(
             )
             embed.add_field(name="👤 Cliente", value=user.mention, inline=True)
             embed.add_field(name="📦 Produto", value=produto['nome'], inline=True)
-            embed.add_field(name="🔐 Conteúdo", value=f"||{conteudo}||", inline=False)
+            embed.add_field(name="🔐 Conteúdo", value=f"||{item}||", inline=False)
             embed.set_footer(text=f"Entregue por: {interaction.user.name}")
             await canal_pagos.send(embed=embed)
         
@@ -1336,6 +1356,7 @@ def webhook():
                                                 "✅ Obrigado pela preferência!"
                                             ), bot.loop
                                         )
+                                        print(f"🎉 Produto automático entregue: {item}")
                                     else:
                                         asyncio.run_coroutine_threadsafe(
                                             user.send(
@@ -1344,15 +1365,18 @@ def webhook():
                                                 f"⚠️ **Estoque esgotado!** Seu pagamento foi registrado. Um administrador irá entregar em breve."
                                             ), bot.loop
                                         )
+                                        print(f"⚠️ Estoque vazio para {produto_id}")
                                 else:
                                     # Produto manual
                                     asyncio.run_coroutine_threadsafe(
                                         user.send(
                                             f"✅ **Pagamento aprovado!**\n\n"
                                             f"📦 **{produto_info['nome']}**\n\n"
-                                            f"👨‍💼 Um administrador irá entregar seu produto em breve."
+                                            f"👨‍💼 Um administrador irá entregar seu produto em breve.\n\n"
+                                            f"🆔 Seu pedido: `{payment_id}`"
                                         ), bot.loop
                                     )
+                                    print(f"📦 Produto manual - aguardando entrega: {produto_id}")
                                 
                                 asyncio.run_coroutine_threadsafe(
                                     log_pagamento_confirmado(user, produto_info["nome"], produto_info["preco"], payment_id),
@@ -1360,6 +1384,8 @@ def webhook():
                                 )
     except Exception as e:
         print(f"❌ Erro webhook: {e}")
+        import traceback
+        traceback.print_exc()
     
     return "OK", 200
 
