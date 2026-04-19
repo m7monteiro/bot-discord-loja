@@ -27,8 +27,8 @@ WEBHOOK_URL = os.environ.get(
 ARQUIVO_PRODUTO = "produto.txt"
 ARQUIVO_PRODUTOS_JSON = "produtos.json"
 ARQUIVO_ESTOQUE_JSON = "estoque.json"
+ARQUIVO_PAGAMENTOS_PROCESSADOS = "pagamentos.json"
 
-# Só verifica produto.txt se existir (opcional)
 if os.path.exists(ARQUIVO_PRODUTO):
     print("📄 produto.txt encontrado")
 else:
@@ -46,8 +46,24 @@ CARGO_ADMIN = 1472666559049633952
 
 carrinhos_ativos = {}
 
-# Controle de pagamentos já processados (evita duplicação)
-pagamentos_processados = set()
+# ===============================
+# SISTEMA DE PAGAMENTOS PROCESSADOS (PERSISTENTE)
+# ===============================
+
+def carregar_pagamentos_processados():
+    """Carrega a lista de pagamentos já processados do arquivo"""
+    if os.path.exists(ARQUIVO_PAGAMENTOS_PROCESSADOS):
+        with open(ARQUIVO_PAGAMENTOS_PROCESSADOS, 'r', encoding='utf-8') as f:
+            return set(json.load(f))
+    return set()
+
+def salvar_pagamentos_processados(pagamentos):
+    """Salva a lista de pagamentos processados"""
+    with open(ARQUIVO_PAGAMENTOS_PROCESSADOS, 'w', encoding='utf-8') as f:
+        json.dump(list(pagamentos), f, indent=2)
+
+pagamentos_processados = carregar_pagamentos_processados()
+print(f"🔒 {len(pagamentos_processados)} pagamentos já processados")
 
 # ===============================
 # SISTEMA DE ESTOQUE
@@ -144,7 +160,7 @@ def entregar_do_estoque(produto_id, variacao_nome=None):
         if variacao_nome in estoque_disponivel[produto_id].get("variacoes", {}):
             itens = estoque_disponivel[produto_id]["variacoes"][variacao_nome]
             if itens and len(itens) > 0:
-                item = itens.pop(0)  # Pega APENAS o primeiro item
+                item = itens.pop(0)
                 salvar_estoque(estoque_disponivel)
                 print(f"✅ Entregue da variação {variacao_nome}: {item}")
                 return item
@@ -158,7 +174,7 @@ def entregar_do_estoque(produto_id, variacao_nome=None):
     # Sem variação, pega do estoque geral
     itens = estoque_disponivel[produto_id].get("itens", [])
     if itens and len(itens) > 0:
-        item = itens.pop(0)  # Pega APENAS o primeiro item
+        item = itens.pop(0)
         salvar_estoque(estoque_disponivel)
         print(f"✅ Entregue do estoque geral: {item}")
         return item
@@ -565,7 +581,7 @@ async def ver_estoque(interaction: discord.Interaction, produto_id: str):
 
 @bot.tree.command(name="add_variacao", description="[ADMIN] Adicionar variação a um produto")
 @app_commands.describe(
-    produto_id="ID do produto",
+    produit_id="ID do produto",
     nome="Nome da variação (ex: Completo, Apenas Conta, Premium)",
     preco="Preço da variação em R$"
 )
@@ -1333,7 +1349,7 @@ def webhook():
     
     print(f"💰 Payment ID encontrado: {payment_id}")
     
-    # 🔥 VERIFICA SE O PAGAMENTO JÁ FOI PROCESSADO 🔥
+    # 🔥 VERIFICA SE O PAGAMENTO JÁ FOI PROCESSADO (ARQUIVO PERSISTENTE) 🔥
     if str(payment_id) in pagamentos_processados:
         print(f"⚠️ Pagamento {payment_id} já foi processado anteriormente! Ignorando...")
         return "OK", 200
@@ -1353,6 +1369,8 @@ def webhook():
                 
                 # 🔥 MARCA COMO PROCESSADO ANTES DE ENTREGAR 🔥
                 pagamentos_processados.add(str(payment_id))
+                salvar_pagamentos_processados(pagamentos_processados)
+                print(f"✅ Pagamento {payment_id} marcado como processado")
                 
                 ref = payment.get("external_reference", "")
                 print(f"🔗 External reference: {ref}")
