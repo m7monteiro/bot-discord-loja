@@ -133,24 +133,37 @@ def criar_pagamento_pix_com_preco(user_id, produto_id, preco, nome_produto):
 # ===============================
 
 def entregar_do_estoque(produto_id, variacao_nome=None):
-    """Pega um item do estoque e remove"""
+    """Pega APENAS UM item do estoque e remove"""
     
     if produto_id not in estoque_disponivel:
+        print(f"❌ Produto {produto_id} não encontrado no estoque")
         return None
     
-    if variacao_nome and variacao_nome in estoque_disponivel[produto_id].get("variacoes", {}):
-        itens = estoque_disponivel[produto_id]["variacoes"][variacao_nome]
-        if itens and len(itens) > 0:
-            item = itens.pop(0)
-            salvar_estoque(estoque_disponivel)
-            return item
+    # Se tem variação específica
+    if variacao_nome:
+        if variacao_nome in estoque_disponivel[produto_id].get("variacoes", {}):
+            itens = estoque_disponivel[produto_id]["variacoes"][variacao_nome]
+            if itens and len(itens) > 0:
+                item = itens.pop(0)  # Pega APENAS o primeiro item
+                salvar_estoque(estoque_disponivel)
+                print(f"✅ Entregue da variação {variacao_nome}: {item}")
+                return item
+            else:
+                print(f"⚠️ Estoque vazio para variação {variacao_nome}")
+                return None
+        else:
+            print(f"⚠️ Variação {variacao_nome} não encontrada")
+            return None
     
+    # Sem variação, pega do estoque geral
     itens = estoque_disponivel[produto_id].get("itens", [])
     if itens and len(itens) > 0:
-        item = itens.pop(0)
+        item = itens.pop(0)  # Pega APENAS o primeiro item
         salvar_estoque(estoque_disponivel)
+        print(f"✅ Entregue do estoque geral: {item}")
         return item
     
+    print(f"⚠️ Estoque vazio para {produto_id}")
     return None
 
 def verificar_estoque(produto_id, variacao_nome=None):
