@@ -46,6 +46,9 @@ CARGO_ADMIN = 1472666559049633952
 
 carrinhos_ativos = {}
 
+# Controle de pagamentos já processados (evita duplicação)
+pagamentos_processados = set()
+
 # ===============================
 # SISTEMA DE ESTOQUE
 # ===============================
@@ -488,7 +491,7 @@ async def remover_estoque(
         await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
         return
     
-    if produit_id not in estoque_disponivel:
+    if produto_id not in estoque_disponivel:
         await interaction.response.send_message(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
         return
     
@@ -1317,6 +1320,11 @@ def webhook():
     
     print(f"💰 Payment ID encontrado: {payment_id}")
     
+    # 🔥 VERIFICA SE O PAGAMENTO JÁ FOI PROCESSADO 🔥
+    if str(payment_id) in pagamentos_processados:
+        print(f"⚠️ Pagamento {payment_id} já foi processado anteriormente! Ignorando...")
+        return "OK", 200
+    
     try:
         # Buscar informações do pagamento
         print(f"🔍 Buscando pagamento {payment_id} no Mercado Pago...")
@@ -1329,6 +1337,9 @@ def webhook():
             
             if payment["status"] == "approved":
                 print("🎉 PAGAMENTO APROVADO!")
+                
+                # 🔥 MARCA COMO PROCESSADO ANTES DE ENTREGAR 🔥
+                pagamentos_processados.add(str(payment_id))
                 
                 ref = payment.get("external_reference", "")
                 print(f"🔗 External reference: {ref}")
