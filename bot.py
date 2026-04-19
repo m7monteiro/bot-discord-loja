@@ -51,14 +51,12 @@ carrinhos_ativos = {}
 # ===============================
 
 def carregar_pagamentos_processados():
-    """Carrega a lista de pagamentos já processados do arquivo"""
     if os.path.exists(ARQUIVO_PAGAMENTOS_PROCESSADOS):
         with open(ARQUIVO_PAGAMENTOS_PROCESSADOS, 'r', encoding='utf-8') as f:
             return set(json.load(f))
     return set()
 
 def salvar_pagamentos_processados(pagamentos):
-    """Salva a lista de pagamentos processados"""
     with open(ARQUIVO_PAGAMENTOS_PROCESSADOS, 'w', encoding='utf-8') as f:
         json.dump(list(pagamentos), f, indent=2)
 
@@ -111,8 +109,6 @@ print(f"📦 {len(produtos_disponiveis)} produtos carregados")
 sdk = mercadopago.SDK(MP_ACCESS_TOKEN)
 
 def criar_pagamento_pix_com_preco(user_id, produto_id, preco, nome_produto):
-    """Gera pagamento PIX com preço personalizado"""
-    
     payment_data = {
         "transaction_amount": preco,
         "description": nome_produto,
@@ -155,7 +151,6 @@ def entregar_do_estoque(produto_id, variacao_nome=None):
         print(f"❌ Produto {produto_id} não encontrado no estoque")
         return None
     
-    # Se tem variação específica
     if variacao_nome:
         if variacao_nome in estoque_disponivel[produto_id].get("variacoes", {}):
             itens = estoque_disponivel[produto_id]["variacoes"][variacao_nome]
@@ -171,7 +166,6 @@ def entregar_do_estoque(produto_id, variacao_nome=None):
             print(f"⚠️ Variação {variacao_nome} não encontrada")
             return None
     
-    # Sem variação, pega do estoque geral
     itens = estoque_disponivel[produto_id].get("itens", [])
     if itens and len(itens) > 0:
         item = itens.pop(0)
@@ -183,8 +177,6 @@ def entregar_do_estoque(produto_id, variacao_nome=None):
     return None
 
 def verificar_estoque(produto_id, variacao_nome=None):
-    """Verifica se tem estoque disponível"""
-    
     if produto_id not in estoque_disponivel:
         return 0
     
@@ -403,7 +395,6 @@ async def comprar(interaction: discord.Interaction, produto: str):
         
         produto_info = produtos_disponiveis[produto]
         
-        # Verificar estoque
         qtd_estoque = verificar_estoque(produto)
         if qtd_estoque == 0 and produto_info.get("tipo") == "auto":
             await interaction.followup.send("❌ **Produto esgotado!** Aguarde reposição.", ephemeral=True)
@@ -581,7 +572,7 @@ async def ver_estoque(interaction: discord.Interaction, produto_id: str):
 
 @bot.tree.command(name="add_variacao", description="[ADMIN] Adicionar variação a um produto")
 @app_commands.describe(
-    produit_id="ID do produto",
+    produto_id="ID do produto",
     nome="Nome da variação (ex: Completo, Apenas Conta, Premium)",
     preco="Preço da variação em R$"
 )
@@ -850,7 +841,6 @@ class ProdutoCompraView(discord.ui.View):
         try:
             produto_info = produtos_disponiveis[self.produto_id]
             
-            # Verificar estoque
             qtd_estoque = verificar_estoque(self.produto_id)
             if qtd_estoque == 0 and produto_info.get("tipo") == "auto":
                 await interaction.followup.send("❌ **Produto esgotado!** Aguarde reposição.", ephemeral=True)
@@ -1127,7 +1117,6 @@ async def criar_produto(
     }
     salvar_produtos(produtos_disponiveis)
     
-    # Inicializar estoque para o novo produto
     if id not in estoque_disponivel:
         estoque_disponivel[id] = {"itens": [], "variacoes": {}}
         salvar_estoque(estoque_disponivel)
@@ -1247,7 +1236,6 @@ async def entregar_produto(
             await interaction.followup.send(f"❌ Produto não encontrado!", ephemeral=True)
             return
         
-        # Verificar estoque
         if produto_id not in estoque_disponivel:
             estoque_disponivel[produto_id] = {"itens": [], "variacoes": {}}
         
@@ -1257,7 +1245,6 @@ async def entregar_produto(
             await interaction.followup.send(f"❌ **Estoque vazio para {produtos_disponiveis[produto_id]['nome']}!**\n\nUse `/add_estoque` para adicionar itens.", ephemeral=True)
             return
         
-        # Se índice não foi especificado, pega o primeiro
         if indice == -1:
             item = itens.pop(0)
         else:
@@ -1331,11 +1318,9 @@ def webhook():
     print("🔔 WEBHOOK ACIONADO!")
     print("=" * 50)
     
-    # Tenta pegar os dados de diferentes formas
     data = request.json if request.is_json else request.form.to_dict()
     print(f"📩 Webhook recebido: {data}")
     
-    # Pega o payment_id de diferentes lugares
     payment_id = None
     if data and isinstance(data, dict):
         payment_id = data.get('data', {}).get('id') or data.get('id')
@@ -1349,13 +1334,11 @@ def webhook():
     
     print(f"💰 Payment ID encontrado: {payment_id}")
     
-    # 🔥 VERIFICA SE O PAGAMENTO JÁ FOI PROCESSADO (ARQUIVO PERSISTENTE) 🔥
     if str(payment_id) in pagamentos_processados:
-        print(f"⚠️ Pagamento {payment_id} já foi processado anteriormente! Ignorando...")
+        print(f"⚠️ Pagamento {payment_id} já foi processado! Ignorando...")
         return "OK", 200
     
     try:
-        # Buscar informações do pagamento
         print(f"🔍 Buscando pagamento {payment_id} no Mercado Pago...")
         payment_response = sdk.payment().get(payment_id)
         print(f"📦 Resposta do MP: status={payment_response.get('status')}")
@@ -1367,7 +1350,6 @@ def webhook():
             if payment["status"] == "approved":
                 print("🎉 PAGAMENTO APROVADO!")
                 
-                # 🔥 MARCA COMO PROCESSADO ANTES DE ENTREGAR 🔥
                 pagamentos_processados.add(str(payment_id))
                 salvar_pagamentos_processados(pagamentos_processados)
                 print(f"✅ Pagamento {payment_id} marcado como processado")
@@ -1388,7 +1370,6 @@ def webhook():
                             print("⚠️ Pagamento do próprio dono, ignorando")
                             return "OK", 200
                         
-                        # Buscar usuário
                         user = bot.get_user(user_id)
                         if not user:
                             try:
@@ -1400,7 +1381,7 @@ def webhook():
                             except Exception as e:
                                 print(f"❌ Erro ao buscar usuário: {e}")
                         
-                        if user and produto_id in produtos_disponiveis:
+                        if user and produit_id in produtos_disponiveis:
                             produto_info = produtos_disponiveis[produto_id]
                             print(f"📦 Produto: {produto_info['nome']} - Tipo: {produto_info.get('tipo')}")
                             
