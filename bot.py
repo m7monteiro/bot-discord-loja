@@ -145,8 +145,6 @@ def criar_pagamento_pix_com_preco(user_id, produto_id, preco, nome_produto):
 # ===============================
 
 def entregar_do_estoque(produto_id, variacao_nome=None):
-    """Pega APENAS UM item do estoque e remove"""
-    
     if produto_id not in estoque_disponivel:
         print(f"❌ Produto {produto_id} não encontrado no estoque")
         return None
@@ -1314,8 +1312,6 @@ def home():
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
-   @app.route("/webhook", methods=["POST"])
-def webhook():
     print("=" * 50)
     print("🔔 WEBHOOK ACIONADO!")
     print("=" * 50)
@@ -1383,7 +1379,6 @@ def webhook():
                             except Exception as e:
                                 print(f"❌ Erro ao buscar usuário: {e}")
                         
-                        # 🔥 LINHA CORRIGIDA 🔥
                         if user and produto_id in produtos_disponiveis:
                             produto_info = produtos_disponiveis[produto_id]
                             print(f"📦 Produto: {produto_info['nome']} - Tipo: {produto_info.get('tipo')}")
