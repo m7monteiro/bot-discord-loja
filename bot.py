@@ -488,7 +488,7 @@ async def remover_estoque(
         await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
         return
     
-    if produto_id not in estoque_disponivel:
+    if produit_id not in estoque_disponivel:
         await interaction.response.send_message(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
         return
     
@@ -1294,45 +1294,42 @@ def home():
     return "🤖 M7 STORE - Bot está online e funcionando!", 200
 
 @app.route("/webhook", methods=["POST"])
-@app.route("/webhook", methods=["POST"])
 def webhook():
-    data = request.json
-    print("📩 Webhook recebido (JSON):", data)
+    print("=" * 50)
+    print("🔔 WEBHOOK ACIONADO!")
+    print("=" * 50)
     
-    # Algumas vezes o Mercado Pago envia como form, não JSON
-    if not data:
-        data = request.form.to_dict()
-        print("📩 Webhook recebido (FORM):", data)
+    # Tenta pegar os dados de diferentes formas
+    data = request.json if request.is_json else request.form.to_dict()
+    print(f"📩 Webhook recebido: {data}")
+    
+    # Pega o payment_id de diferentes lugares
+    payment_id = None
+    if data and isinstance(data, dict):
+        payment_id = data.get('data', {}).get('id') or data.get('id')
+    
+    if not payment_id:
+        payment_id = request.args.get('id') or request.args.get('data.id')
+    
+    if not payment_id:
+        print("❌ Não foi possível extrair o payment_id")
+        return "OK", 200
+    
+    print(f"💰 Payment ID encontrado: {payment_id}")
     
     try:
-        # Verificar diferentes formatos que o Mercado Pago pode enviar
-        payment_id = None
-        
-        # Formato 1: {"data": {"id": "123"}}
-        if data and "data" in data and "id" in data["data"]:
-            payment_id = data["data"]["id"]
-        # Formato 2: {"id": "123"}
-        elif data and "id" in data:
-            payment_id = data["id"]
-        # Formato 3: parâmetro na URL
-        else:
-            payment_id = request.args.get('id')
-        
-        if not payment_id:
-            print("⚠️ Nenhum payment_id encontrado no webhook")
-            return "OK", 200
-        
-        print(f"💰 Payment ID encontrado: {payment_id}")
-        
         # Buscar informações do pagamento
+        print(f"🔍 Buscando pagamento {payment_id} no Mercado Pago...")
         payment_response = sdk.payment().get(payment_id)
-        print(f"📦 Resposta do MP: {payment_response}")
+        print(f"📦 Resposta do MP: status={payment_response.get('status')}")
         
         if payment_response["status"] == 200:
             payment = payment_response["response"]
             print(f"✅ Status do pagamento: {payment.get('status')}")
             
             if payment["status"] == "approved":
+                print("🎉 PAGAMENTO APROVADO!")
+                
                 ref = payment.get("external_reference", "")
                 print(f"🔗 External reference: {ref}")
                 
@@ -1356,7 +1353,7 @@ def webhook():
                                 future = asyncio.run_coroutine_threadsafe(
                                     bot.fetch_user(user_id), bot.loop
                                 )
-                                user = future.result(timeout=5)
+                                user = future.result(timeout=10)
                                 print(f"👤 Usuário encontrado: {user}")
                             except Exception as e:
                                 print(f"❌ Erro ao buscar usuário: {e}")
@@ -1404,12 +1401,23 @@ def webhook():
                             )
                         else:
                             print(f"❌ Usuário ou produto não encontrado")
+                    else:
+                        print(f"❌ External reference mal formatada: {ref}")
+                else:
+                    print("❌ External reference vazia!")
+            else:
+                print(f"⚠️ Pagamento não aprovado. Status: {payment['status']}")
+        else:
+            print(f"❌ Erro ao buscar pagamento: {payment_response}")
+            
     except Exception as e:
-        print(f"❌ Erro no webhook: {e}")
+        print(f"❌ ERRO CRÍTICO NO WEBHOOK: {e}")
         import traceback
         traceback.print_exc()
     
+    print("=" * 50)
     return "OK", 200
+
 # ===============================
 # START
 # ===============================
