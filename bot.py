@@ -1314,6 +1314,8 @@ def home():
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
+   @app.route("/webhook", methods=["POST"])
+def webhook():
     print("=" * 50)
     print("🔔 WEBHOOK ACIONADO!")
     print("=" * 50)
@@ -1381,7 +1383,8 @@ def webhook():
                             except Exception as e:
                                 print(f"❌ Erro ao buscar usuário: {e}")
                         
-                        if user and produit_id in produtos_disponiveis:
+                        # 🔥 LINHA CORRIGIDA 🔥
+                        if user and produto_id in produtos_disponiveis:
                             produto_info = produtos_disponiveis[produto_id]
                             print(f"📦 Produto: {produto_info['nome']} - Tipo: {produto_info.get('tipo')}")
                             
