@@ -1379,6 +1379,7 @@ def webhook():
                             except Exception as e:
                                 print(f"❌ Erro ao buscar usuário: {e}")
                         
+                        # 🔥 LINHA CORRIGIDA 🔥
                         if user and produto_id in produtos_disponiveis:
                             produto_info = produtos_disponiveis[produto_id]
                             print(f"📦 Produto: {produto_info['nome']} - Tipo: {produto_info.get('tipo')}")
