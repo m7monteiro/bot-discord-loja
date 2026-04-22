@@ -1326,7 +1326,12 @@ def webhook():
                         partes = ref.split('_')
                         if len(partes) >= 2:
                             produto_id = partes[0]
-                            user_id = int(partes[1])
+                            variacao_nome = None
+                            if len(partes) == 4:
+                                variacao_nome = partes[1]
+                                user_id = int(partes[2])
+                            else:
+                                user_id = int(partes[1])
                             
                             print(f"📦 Produto ID: {produto_id}")
                             print(f"👤 User ID: {user_id}")
@@ -1352,7 +1357,7 @@ def webhook():
                                 
                                 if produto_info.get("tipo") == "auto":
                                     # entregar_do_estoque já é thread-safe com estoque_lock
-                                    item = entregar_do_estoque(produto_id)
+                                    item = entregar_do_estoque(produto_id, variacao_nome=variacao_nome)
                                     
                                     if item:
                                         asyncio.run_coroutine_threadsafe(
