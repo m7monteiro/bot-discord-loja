@@ -11,6 +11,7 @@ import base64
 import json
 from datetime import datetime
 from io import BytesIO
+import pyotp
 
 print("🔧 Iniciando bot...")
 
@@ -390,7 +391,6 @@ class VariacoesView(discord.ui.View):
             print(f"❌ Erro variação: {e}")
             await interaction.followup.send("❌ Ocorreu um erro.", ephemeral=True)
 
-
 # ===============================
 # COMANDOS DE ADMIN - ESTOQUE
 # ===============================
@@ -445,7 +445,6 @@ async def add_estoque(
         ephemeral=True
     )
 
-
 @bot.tree.command(name="remover_estoque", description="[ADMIN] Remover item específico do estoque")
 @app_commands.describe(
     produto_id="ID do produto",
@@ -479,7 +478,6 @@ async def remover_estoque(
         f"🔐 Item removido: `{removido}`",
         ephemeral=True
     )
-
 
 @bot.tree.command(name="ver_estoque", description="[ADMIN] Ver estoque disponível")
 @app_commands.describe(produto_id="ID do produto")
@@ -557,7 +555,6 @@ async def add_variacao(
         ephemeral=True
     )
 
-
 @bot.tree.command(name="listar_variacoes", description="[ADMIN] Listar variações de um produto")
 @app_commands.describe(produto_id="ID do produto")
 async def listar_variacoes(interaction: discord.Interaction, produto_id: str):
@@ -588,7 +585,6 @@ async def listar_variacoes(interaction: discord.Interaction, produto_id: str):
     embed.set_footer(text="Use /editar_variacao ou /remover_variacao com o índice")
     
     await interaction.response.send_message(embed=embed, ephemeral=True)
-
 
 @bot.tree.command(name="editar_variacao", description="[ADMIN] Editar nome ou preço de uma variação")
 @app_commands.describe(
@@ -631,7 +627,6 @@ async def editar_variacao(
     salvar_produtos(produtos_disponiveis)
     
     await interaction.response.send_message(mensagem, ephemeral=True)
-
 
 @bot.tree.command(name="remover_variacao", description="[ADMIN] Remover variação de um produto")
 @app_commands.describe(
@@ -701,9 +696,6 @@ async def listar_produtos(interaction: discord.Interaction):
     embed.set_footer(text="M7 STORE")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# ===============================
-# COMANDO /LOJA
-# ===============================
 @bot.tree.command(name="loja", description="🛒 Ver todos os produtos da loja")
 async def mostrar_loja(interaction: discord.Interaction):
     if not produtos_disponiveis:
@@ -765,7 +757,6 @@ async def criar_embed_produto(produto_id: str, produto_info: dict):
     
     return embed
 
-
 class ProdutoCompraView(discord.ui.View):
     def __init__(self, produto_id: str, produto_nome: str, variacoes: list = None):
         super().__init__(timeout=None)
@@ -773,8 +764,8 @@ class ProdutoCompraView(discord.ui.View):
         self.produto_nome = produto_nome
         self.variacoes = variacoes or []
     
-    @discord.ui.button(label="COMPRAR AGORA", style=discord.ButtonStyle.success, emoji="🛒")
-    async def comprar_agora(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(label="🛒 Comprar", style=discord.ButtonStyle.success, custom_id="btn_comprar")
+    async def comprar(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
         
         if self.variacoes and len(self.variacoes) > 0:
@@ -839,7 +830,6 @@ class ProdutoCompraView(discord.ui.View):
             print(f"❌ Erro: {e}")
             await interaction.followup.send("❌ Ocorreu um erro.", ephemeral=True)
 
-
 @bot.tree.command(name="configurar_produto", description="[ADMIN] Criar/atualizar canal de um produto")
 @app_commands.describe(
     produto_id="ID do produto",
@@ -900,7 +890,6 @@ async def configurar_produto(
     
     await canal.send(embed=embed, view=view)
     await interaction.followup.send(mensagem, ephemeral=True)
-
 
 @bot.tree.command(name="atualizar_produto", description="[ADMIN] Atualizar produto e canal automaticamente")
 @app_commands.describe(
@@ -969,7 +958,6 @@ async def atualizar_produto(
     
     await interaction.followup.send(mensagem, ephemeral=True)
 
-
 @bot.tree.command(name="sincronizar_canal", description="[ADMIN] Forçar atualização do canal do produto")
 @app_commands.describe(produto_id="ID do produto")
 async def sincronizar_canal(interaction: discord.Interaction, produto_id: str):
@@ -1001,7 +989,6 @@ async def sincronizar_canal(interaction: discord.Interaction, produto_id: str):
         await interaction.followup.send(f"✅ Canal #{produto_id} sincronizado!", ephemeral=True)
     else:
         await interaction.followup.send(f"❌ Canal para {produto_id} não encontrado!", ephemeral=True)
-
 
 @bot.tree.command(name="editar_imagem", description="[ADMIN] Mudar a imagem do produto")
 @app_commands.describe(
@@ -1035,7 +1022,7 @@ async def editar_imagem(interaction: discord.Interaction, produto_id: str, url_i
     nome="Nome do produto",
     preco="Preço em R$",
     descricao="Descrição do produto",
-    tipo="Tipo: auto ou manual"
+    tipo="Tipo: auto or manual"
 )
 async def criar_produto(
     interaction: discord.Interaction,
@@ -1078,7 +1065,6 @@ async def criar_produto(
         ephemeral=True
     )
 
-
 @bot.tree.command(name="editar_preco", description="[ADMIN] Alterar preço de um produto")
 @app_commands.describe(
     produto_id="ID do produto",
@@ -1102,7 +1088,6 @@ async def editar_preco(interaction: discord.Interaction, produto_id: str, novo_p
         f"✅ Preço atualizado!\n📦 Produto: {produto['nome']}\n📉 Antigo: R$ {preco_antigo:.2f}\n📈 Novo: R$ {novo_preco:.2f}",
         ephemeral=True
     )
-
 
 @bot.tree.command(name="editar_produto", description="[ADMIN] Alterar nome/descrição")
 @app_commands.describe(
@@ -1138,7 +1123,6 @@ async def editar_produto(
     salvar_produtos(produtos_disponiveis)
     await interaction.response.send_message(mensagem, ephemeral=True)
 
-
 @bot.tree.command(name="remover_produto", description="[ADMIN] Remover um produto")
 @app_commands.describe(produto_id="ID do produto")
 async def remover_produto(interaction: discord.Interaction, produto_id: str):
@@ -1154,7 +1138,6 @@ async def remover_produto(interaction: discord.Interaction, produto_id: str):
     salvar_produtos(produtos_disponiveis)
     
     await interaction.response.send_message(f"✅ Produto removido!\n📦 Removido: {produto['nome']}", ephemeral=True)
-
 
 @bot.tree.command(name="entregar", description="[ADMIN] Entregar produto manual do estoque")
 @app_commands.describe(
@@ -1234,11 +1217,8 @@ async def entregar_produto(
     except Exception as e:
         await interaction.followup.send(f"❌ Erro: {e}", ephemeral=True)
 
-# ===============================
-# BACKUP
-# ===============================
-
 @bot.tree.command(name="backup", description="[ADMIN] Fazer backup dos produtos")
+@app_commands.describe()
 async def fazer_backup(interaction: discord.Interaction):
     if interaction.user.id != MEU_ID:
         await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
@@ -1254,25 +1234,12 @@ async def fazer_backup(interaction: discord.Interaction):
         ephemeral=True
     )
 
-# ===============================
-# COMANDO 2FA
-# ===============================
-
-# Instale a biblioteca: pip install pyotp
-# Adicione "pyotp" ao seu requirements.txt
-
-import pyotp
-
 @bot.tree.command(name="2fa", description="Gerar código 2FA a partir da chave")
 @app_commands.describe(chave="Sua chave 2FA (ex: 7J64V3P3E77J3LKNUGSZ5QANTLRLTKVL)")
 async def gerar_2fa(interaction: discord.Interaction, chave: str):
     """Gera o código 2FA atual a partir da chave fornecida"""
-    
     try:
-        # Remove espaços e letras maiúsculas
         chave = chave.strip().upper()
-        
-        # Verifica se a chave é válida (mínimo 16 caracteres)
         if len(chave) < 16:
             embed = discord.Embed(
                 title="❌ **CHAVE INVÁLIDA**",
@@ -1283,45 +1250,21 @@ async def gerar_2fa(interaction: discord.Interaction, chave: str):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
         
-        # Gera o código 2FA
         totp = pyotp.TOTP(chave)
         codigo_atual = totp.now()
         tempo_restante = totp.interval - (int(time.time()) % totp.interval)
         
-        # Embed bonito para o cliente
         embed = discord.Embed(
             title="🔐 **CÓDIGO 2FA GERADO**",
             description="Use o código abaixo para acessar sua conta:",
             color=0x00ff88,
             timestamp=datetime.now()
         )
-        
-        embed.add_field(
-            name="📋 **CÓDIGO:**",
-            value=f"```{codigo_atual}```",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="⏰ **VÁLIDO POR:**",
-            value=f"{tempo_restante} segundos",
-            inline=True
-        )
-        
-        embed.add_field(
-            name="🔄 **EXPIRA EM:**",
-            value=f"{tempo_restante}s",
-            inline=True
-        )
-        
-        embed.add_field(
-            name="🔑 **SUA CHAVE:**",
-            value=f"||{chave}||",
-            inline=False
-        )
-        
+        embed.add_field(name="📋 **CÓDIGO:**", value=f"```{codigo_atual}```", inline=False)
+        embed.add_field(name="⏰ **VÁLIDO POR:**", value=f"{tempo_restante} segundos", inline=True)
+        embed.add_field(name="🔄 **EXPIRA EM:**", value=f"{tempo_restante}s", inline=True)
+        embed.add_field(name="🔑 **SUA CHAVE:**", value=f"||{chave}||", inline=False)
         embed.set_footer(text="O código expira em 30 segundos. Use /2fa novamente para gerar um novo.")
-        
         await interaction.response.send_message(embed=embed, ephemeral=True)
         
     except Exception as e:
@@ -1335,7 +1278,7 @@ async def gerar_2fa(interaction: discord.Interaction, chave: str):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ===============================
-# WEBHOOK (CORRIGIDO - ANTI-DUPLICAÇÃO)
+# WEBHOOK (CORRIGIDO - ANTI-DUPLICAÇÃO E ENTREGA SEGURA)
 # ===============================
 app = Flask(__name__)
 
@@ -1373,111 +1316,90 @@ def webhook():
         try:
             print(f"🔍 Buscando pagamento {payment_id} no Mercado Pago...")
             payment_response = sdk.payment().get(payment_id)
-            print(f"📦 Resposta do MP: status={payment_response.get('status')}")
             
             if payment_response["status"] == 200:
                 payment = payment_response["response"]
-                print(f"✅ Status do pagamento: {payment.get('status')}")
                 
                 if payment["status"] == "approved":
                     print("🎉 PAGAMENTO APROVADO!")
                     
                     pagamentos_processados.add(str(payment_id))
                     salvar_pagamentos_processados(pagamentos_processados)
-                    print(f"✅ Pagamento {payment_id} marcado como processado")
                     
                     ref = payment.get("external_reference", "")
-                    print(f"🔗 External reference: {ref}")
-                    
                     if ref:
                         partes = ref.split('_')
-                        if len(partes) >= 2:
+                        if len(partes) >= 3:
                             produto_id = partes[0]
-                            variacao_nome = None
-                            if len(partes) == 4:
-                                variacao_nome = partes[1]
-                                user_id = int(partes[2])
-                            else:
-                                user_id = int(partes[1])
-                            
-                            print(f"📦 Produto ID: {produto_id}")
-                            print(f"👤 User ID: {user_id}")
+                            try:
+                                user_id = int(partes[-2])
+                                variacao_nome = "_".join(partes[1:-2]) if len(partes) > 3 else None
+                            except ValueError:
+                                if len(partes) == 4:
+                                    variacao_nome = partes[1]
+                                    user_id = int(partes[2])
+                                else:
+                                    variacao_nome = None
+                                    user_id = int(partes[1])
                             
                             if user_id == MEU_ID:
-                                print("⚠️ Pagamento do próprio dono, ignorando")
                                 return "OK", 200
                             
                             user = bot.get_user(user_id)
                             if not user:
                                 try:
-                                    future = asyncio.run_coroutine_threadsafe(
-                                        bot.fetch_user(user_id), bot.loop
-                                    )
+                                    future = asyncio.run_coroutine_threadsafe(bot.fetch_user(user_id), bot.loop)
                                     user = future.result(timeout=10)
-                                    print(f"👤 Usuário encontrado: {user}")
-                                except Exception as e:
-                                    print(f"❌ Erro ao buscar usuário: {e}")
+                                except:
+                                    user = None
                             
                             if user and produto_id in produtos_disponiveis:
                                 produto_info = produtos_disponiveis[produto_id]
-                                print(f"📦 Produto: {produto_info['nome']} - Tipo: {produto_info.get('tipo')}")
                                 
                                 if produto_info.get("tipo") == "auto":
                                     item = entregar_do_estoque(produto_id, variacao_nome=variacao_nome)
-                                    
                                     if item:
-                                        asyncio.run_coroutine_threadsafe(
-                                            user.send(
-                                                f"✅ **Pagamento confirmado!**\n\n"
-                                                f"📦 **{produto_info['nome']}**\n\n"
-                                                f"🔐 **Seu produto:**\n```{item}```\n\n"
-                                                "✅ Obrigado pela preferência!"
-                                            ), bot.loop
-                                        )
-                                        print(f"🎉 Produto automático entregue: {item}")
+                                        async def enviar_dm():
+                                            try:
+                                                await user.send(
+                                                    f"✅ **Pagamento confirmado!**\n\n"
+                                                    f"📦 **{produto_info['nome']}**\n\n"
+                                                    f"🔐 **Seu produto:**\n```{item}```\n\n"
+                                                    "✅ Obrigado pela preferência!"
+                                                )
+                                            except discord.Forbidden:
+                                                canal_pagos = bot.get_channel(CANAL_PAGOS)
+                                                if canal_pagos:
+                                                    await canal_pagos.send(f"⚠️ {user.mention}, seu pagamento de **{produto_info['nome']}** foi aprovado, mas sua DM está fechada! Abra um ticket para receber.")
+                                                with estoque_lock:
+                                                    if variacao_nome:
+                                                        estoque_disponivel[produto_id]["variacoes"][variacao_nome].insert(0, item)
+                                                    else:
+                                                        estoque_disponivel[produto_id]["itens"].insert(0, item)
+                                                    salvar_estoque(estoque_disponivel)
+                                        asyncio.run_coroutine_threadsafe(enviar_dm(), bot.loop)
                                     else:
-                                        asyncio.run_coroutine_threadsafe(
-                                            user.send(
-                                                f"✅ **Pagamento confirmado!**\n\n"
-                                                f"📦 **{produto_info['nome']}**\n\n"
-                                                f"⚠️ **Estoque esgotado!** Seu pagamento foi registrado. Um administrador irá entregar em breve."
-                                            ), bot.loop
-                                        )
-                                        print(f"⚠️ Estoque vazio para {produto_id}")
+                                        async def avisar_esgotado():
+                                            try: await user.send(f"✅ **Pagamento confirmado!**\n\n📦 **{produto_info['nome']}**\n\n⚠️ **Estoque esgotado!** Um administrador irá entregar em breve.")
+                                            except: pass
+                                        asyncio.run_coroutine_threadsafe(avisar_esgotado(), bot.loop)
                                 else:
-                                    asyncio.run_coroutine_threadsafe(
-                                        user.send(
-                                            f"✅ **Pagamento aprovado!**\n\n"
-                                            f"📦 **{produto_info['nome']}**\n\n"
-                                            f"👨‍💼 Um administrador irá entregar seu produto em breve.\n\n"
-                                            f"🆔 Seu pedido: `{payment_id}`"
-                                        ), bot.loop
-                                    )
-                                    print(f"📦 Produto manual - aguardando entrega: {produto_id}")
+                                    async def avisar_manual():
+                                        try: await user.send(f"✅ **Pagamento aprovado!**\n\n📦 **{produto_info['nome']}**\n\n👨‍💼 Um administrador irá entregar em breve.\n🆔 Pedido: `{payment_id}`")
+                                        except: pass
+                                    asyncio.run_coroutine_threadsafe(avisar_manual(), bot.loop)
                                 
-                                asyncio.run_coroutine_threadsafe(
-                                    log_pagamento_confirmado(user, produto_info["nome"], produto_info["preco"], payment_id),
-                                    bot.loop
-                                )
-                            else:
-                                print(f"❌ Usuário ou produto não encontrado")
-                        else:
-                            print(f"❌ External reference mal formatada: {ref}")
-                    else:
-                        print("❌ External reference vazia!")
+                                asyncio.run_coroutine_threadsafe(log_pagamento_confirmado(user, produto_info["nome"], produto_info["preco"], payment_id), bot.loop)
                 else:
                     print(f"⚠️ Pagamento não aprovado. Status: {payment['status']}")
             else:
                 print(f"❌ Erro ao buscar pagamento: {payment_response}")
-                
         except Exception as e:
             print(f"❌ ERRO CRÍTICO NO WEBHOOK: {e}")
-            import traceback
-            traceback.print_exc()
             if str(payment_id) in pagamentos_processados:
                 pagamentos_processados.discard(str(payment_id))
                 salvar_pagamentos_processados(pagamentos_processados)
-        
+    
     print("=" * 50)
     return "OK", 200
 
