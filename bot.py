@@ -49,11 +49,7 @@ carrinhos_ativos = {}
 # ===============================
 # LOCKS PARA THREAD SAFETY (CORREÇÃO ANTI-DUPLICAÇÃO)
 # ===============================
-# Este lock garante que apenas UMA requisição de webhook processa um pagamento por vez.
-# Sem ele, o Mercado Pago pode enviar 2 webhooks simultâneos e ambos entregam o produto.
 webhook_lock = threading.Lock()
-
-# Este lock protege o acesso ao estoque contra condições de corrida.
 estoque_lock = threading.Lock()
 
 # ===============================
@@ -151,11 +147,10 @@ def criar_pagamento_pix_com_preco(user_id, produto_id, preco, nome_produto):
     return None
 
 # ===============================
-# FUNÇÃO PARA ENTREGAR PRODUTO DO ESTOQUE (CORRIGIDA - THREAD SAFE)
+# FUNÇÃO PARA ENTREGAR PRODUTO DO ESTOQUE (THREAD SAFE)
 # ===============================
 
 def entregar_do_estoque(produto_id, variacao_nome=None):
-    # O lock garante que apenas uma thread por vez pode retirar item do estoque
     with estoque_lock:
         if produto_id not in estoque_disponivel:
             print(f"❌ Produto {produto_id} não encontrado no estoque")
@@ -1260,6 +1255,86 @@ async def fazer_backup(interaction: discord.Interaction):
     )
 
 # ===============================
+# COMANDO 2FA
+# ===============================
+
+# Instale a biblioteca: pip install pyotp
+# Adicione "pyotp" ao seu requirements.txt
+
+import pyotp
+
+@bot.tree.command(name="2fa", description="Gerar código 2FA a partir da chave")
+@app_commands.describe(chave="Sua chave 2FA (ex: 7J64V3P3E77J3LKNUGSZ5QANTLRLTKVL)")
+async def gerar_2fa(interaction: discord.Interaction, chave: str):
+    """Gera o código 2FA atual a partir da chave fornecida"""
+    
+    try:
+        # Remove espaços e letras maiúsculas
+        chave = chave.strip().upper()
+        
+        # Verifica se a chave é válida (mínimo 16 caracteres)
+        if len(chave) < 16:
+            embed = discord.Embed(
+                title="❌ **CHAVE INVÁLIDA**",
+                description="A chave deve ter pelo menos 16 caracteres.\nVerifique se você copiou corretamente.",
+                color=0xff0000,
+                timestamp=datetime.now()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
+        # Gera o código 2FA
+        totp = pyotp.TOTP(chave)
+        codigo_atual = totp.now()
+        tempo_restante = totp.interval - (int(time.time()) % totp.interval)
+        
+        # Embed bonito para o cliente
+        embed = discord.Embed(
+            title="🔐 **CÓDIGO 2FA GERADO**",
+            description="Use o código abaixo para acessar sua conta:",
+            color=0x00ff88,
+            timestamp=datetime.now()
+        )
+        
+        embed.add_field(
+            name="📋 **CÓDIGO:**",
+            value=f"```{codigo_atual}```",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="⏰ **VÁLIDO POR:**",
+            value=f"{tempo_restante} segundos",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🔄 **EXPIRA EM:**",
+            value=f"{tempo_restante}s",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🔑 **SUA CHAVE:**",
+            value=f"||{chave}||",
+            inline=False
+        )
+        
+        embed.set_footer(text="O código expira em 30 segundos. Use /2fa novamente para gerar um novo.")
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        print(f"❌ Erro no comando 2FA: {e}")
+        embed = discord.Embed(
+            title="❌ **ERRO AO GERAR CÓDIGO**",
+            description="Verifique se a chave 2FA está correta.\n\n**Formato esperado:**\n`7J64V3P3E77J3LKNUGSZ5QANTLRLTKVL`",
+            color=0xff0000,
+            timestamp=datetime.now()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+# ===============================
 # WEBHOOK (CORRIGIDO - ANTI-DUPLICAÇÃO)
 # ===============================
 app = Flask(__name__)
@@ -1290,13 +1365,7 @@ def webhook():
     
     print(f"💰 Payment ID encontrado: {payment_id}")
 
-    # ============================================================
-    # CORREÇÃO PRINCIPAL: Usar Lock para evitar condição de corrida
-    # O Mercado Pago envia múltiplos webhooks para o mesmo pagamento.
-    # O Lock garante que apenas UM deles será processado por vez.
-    # ============================================================
     with webhook_lock:
-        # Verificação dentro do Lock (verificação segura)
         if str(payment_id) in pagamentos_processados:
             print(f"⚠️ Pagamento {payment_id} já foi processado! Ignorando...")
             return "OK", 200
@@ -1313,8 +1382,6 @@ def webhook():
                 if payment["status"] == "approved":
                     print("🎉 PAGAMENTO APROVADO!")
                     
-                    # Marca como processado IMEDIATAMENTE antes de qualquer entrega
-                    # Isso garante que nenhum outro webhook duplicado passe por aqui
                     pagamentos_processados.add(str(payment_id))
                     salvar_pagamentos_processados(pagamentos_processados)
                     print(f"✅ Pagamento {payment_id} marcado como processado")
@@ -1356,7 +1423,6 @@ def webhook():
                                 print(f"📦 Produto: {produto_info['nome']} - Tipo: {produto_info.get('tipo')}")
                                 
                                 if produto_info.get("tipo") == "auto":
-                                    # entregar_do_estoque já é thread-safe com estoque_lock
                                     item = entregar_do_estoque(produto_id, variacao_nome=variacao_nome)
                                     
                                     if item:
@@ -1408,7 +1474,6 @@ def webhook():
             print(f"❌ ERRO CRÍTICO NO WEBHOOK: {e}")
             import traceback
             traceback.print_exc()
-            # Se houve erro crítico APÓS marcar como processado, remove para permitir nova tentativa
             if str(payment_id) in pagamentos_processados:
                 pagamentos_processados.discard(str(payment_id))
                 salvar_pagamentos_processados(pagamentos_processados)
