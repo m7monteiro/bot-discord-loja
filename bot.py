@@ -12,7 +12,6 @@ import json
 from datetime import datetime
 from io import BytesIO
 import pyotp
-import requests
 
 print("🔧 Iniciando bot...")
 
@@ -1269,7 +1268,7 @@ async def gerar_2fa(interaction: discord.Interaction, chave: str):
 class Modal2FA(discord.ui.Modal, title="🔐 Gerador de Código 2FA"):
     chave = discord.ui.TextInput(
         label="🔑 Chave de Segurança",
-        placeholder="Cole sua chave 2FA aqui (ex: 7J64V3P3E77J3LKNUGSZ5QANTLRLTKVL)",
+        placeholder="Cole sua chave 2FA aqui",
         style=discord.TextStyle.paragraph,
         required=True,
         max_length=100
@@ -1282,7 +1281,7 @@ class Modal2FA(discord.ui.Modal, title="🔐 Gerador de Código 2FA"):
             chave = self.chave.value.strip().upper()
             
             if len(chave) < 16:
-                await interaction.followup.send("❌ **Chave inválida!** A chave deve ter pelo menos 16 caracteres.", ephemeral=True)
+                await interaction.followup.send("❌ **Chave inválida!**", ephemeral=True)
                 return
             
             totp = pyotp.TOTP(chave)
@@ -1291,20 +1290,18 @@ class Modal2FA(discord.ui.Modal, title="🔐 Gerador de Código 2FA"):
             
             embed = discord.Embed(
                 title="🔐 **CÓDIGO 2FA GERADO**",
-                description="Use o código abaixo para acessar sua conta:",
+                description=f"```{codigo}```",
                 color=0x00ff88,
                 timestamp=datetime.now()
             )
-            
-            embed.add_field(name="📋 **CÓDIGO:**", value=f"```{codigo}```", inline=False)
             embed.add_field(name="⏰ **EXPIRA EM:**", value=f"{tempo_restante} segundos", inline=True)
-            embed.set_footer(text="O código expira em 30 segundos. Use o botão novamente para gerar um novo.")
+            embed.set_footer(text="Use o botão novamente para gerar um novo código.")
             
             await interaction.followup.send(embed=embed, ephemeral=True)
             
         except Exception as e:
-            print(f"❌ Erro no modal 2FA: {e}")
-            await interaction.followup.send("❌ **Erro ao gerar código!** Verifique se a chave está correta.", ephemeral=True)
+            print(f"❌ Erro modal 2FA: {e}")
+            await interaction.followup.send("❌ **Erro ao gerar código!**", ephemeral=True)
 
 
 class Botao2FAView(discord.ui.View):
@@ -1313,8 +1310,7 @@ class Botao2FAView(discord.ui.View):
     
     @discord.ui.button(label="📋 2FA", style=discord.ButtonStyle.primary, emoji="🔐")
     async def botao_2fa(self, interaction: discord.Interaction, button: discord.ui.Button):
-        modal = Modal2FA()
-        await interaction.response.send_modal(modal)
+        await interaction.response.send_modal(Modal2FA())
 
 
 @bot.tree.command(name="criar_modal_2fa", description="[ADMIN] Criar mensagem com botão 2FA no canal atual")
@@ -1325,25 +1321,23 @@ async def criar_modal_2fa(interaction: discord.Interaction):
     
     embed = discord.Embed(
         title="🔐 **GERADOR DE CÓDIGOS 2FA**",
-        description="Clique no botão abaixo para gerar seu código de autenticação.",
+        description="Clique no botão abaixo e cole sua chave 2FA.",
         color=0x2b2d31,
         timestamp=datetime.now()
     )
     
     embed.add_field(
         name="📌 **COMO FUNCIONA:**",
-        value="1️⃣ Clique no botão **2FA**\n2️⃣ Cole sua chave no formulário\n3️⃣ Receba o código instantâneo",
+        value="1️⃣ Clique no botão **2FA**\n2️⃣ Cole sua chave\n3️⃣ Receba o código",
         inline=False
     )
-    
-    embed.set_footer(text="Simples • Rápido • Seguro")
     
     view = Botao2FAView()
     
     await interaction.response.send_message(embed=embed, view=view)
 
 # ===============================
-# WEBHOOK (RESTAURADO DA VERSÃO ESTÁVEL)
+# WEBHOOK
 # ===============================
 app = Flask(__name__)
 
