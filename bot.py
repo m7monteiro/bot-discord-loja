@@ -391,6 +391,7 @@ class VariacoesView(discord.ui.View):
             print(f"❌ Erro variação: {e}")
             await interaction.followup.send("❌ Ocorreu um erro.", ephemeral=True)
 
+
 # ===============================
 # COMANDOS DE ADMIN - ESTOQUE
 # ===============================
@@ -1234,21 +1235,32 @@ async def fazer_backup(interaction: discord.Interaction):
     )
 
 # ===============================
-# COMANDO 2FA (ADICIONADO COM SEGURANÇA)
+# COMANDO SYNC (FORÇAR SINCRONIZAÇÃO)
+# ===============================
+
+@bot.tree.command(name="sync", description="[ADMIN] Forçar sincronização dos comandos")
+async def sync_commands(interaction: discord.Interaction):
+    if interaction.user.id != MEU_ID:
+        await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
+        return
+    
+    await interaction.response.defer(ephemeral=True)
+    
+    # Sincroniza os comandos globalmente
+    await bot.tree.sync()
+    
+    await interaction.followup.send("✅ **Comandos sincronizados!** Aguarde alguns segundos e teste `/criar_modal_2fa`.", ephemeral=True)
+
+# ===============================
+# COMANDO 2FA (VERSÃO SIMPLES)
 # ===============================
 @bot.tree.command(name="2fa", description="Gerar código 2FA a partir da chave")
 @app_commands.describe(chave="Sua chave 2FA (ex: 7J64V3P3E77J3LKNUGSZ5QANTLRLTKVL)")
 async def gerar_2fa(interaction: discord.Interaction, chave: str):
-    """Gera o código 2FA atual a partir da chave fornecida"""
     try:
         chave = chave.strip().upper()
         if len(chave) < 16:
-            embed = discord.Embed(
-                title="❌ **CHAVE INVÁLIDA**",
-                description="A chave deve ter pelo menos 16 caracteres.",
-                color=0xff0000,
-                timestamp=datetime.now()
-            )
+            embed = discord.Embed(title="❌ **CHAVE INVÁLIDA**", description="A chave deve ter pelo menos 16 caracteres.", color=0xff0000, timestamp=datetime.now())
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
         
@@ -1256,12 +1268,7 @@ async def gerar_2fa(interaction: discord.Interaction, chave: str):
         codigo_atual = totp.now()
         tempo_restante = totp.interval - (int(time.time()) % totp.interval)
         
-        embed = discord.Embed(
-            title="🔐 **CÓDIGO 2FA GERADO**",
-            description="Use o código abaixo para acessar sua conta:",
-            color=0x00ff88,
-            timestamp=datetime.now()
-        )
+        embed = discord.Embed(title="🔐 **CÓDIGO 2FA GERADO**", description="Use o código abaixo para acessar sua conta:", color=0x00ff88, timestamp=datetime.now())
         embed.add_field(name="📋 **CÓDIGO:**", value=f"```{codigo_atual}```", inline=False)
         embed.add_field(name="⏰ **VÁLIDO POR:**", value=f"{tempo_restante} segundos", inline=True)
         embed.add_field(name="🔑 **SUA CHAVE:**", value=f"||{chave}||", inline=False)
@@ -1272,7 +1279,82 @@ async def gerar_2fa(interaction: discord.Interaction, chave: str):
         await interaction.response.send_message("❌ Erro ao gerar código. Verifique a chave.", ephemeral=True)
 
 # ===============================
-# WEBHOOK (RESTAURADO DA VERSÃO ESTÁVEL)
+# COMANDO 2FA COM BOTÃO E MODAL
+# ===============================
+
+class Modal2FA(discord.ui.Modal, title="🔐 Gerador de Código 2FA"):
+    chave = discord.ui.TextInput(
+        label="🔑 Chave de Segurança",
+        placeholder="Cole sua chave 2FA aqui",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        max_length=100
+    )
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        
+        try:
+            chave = self.chave.value.strip().upper()
+            
+            if len(chave) < 16:
+                await interaction.followup.send("❌ **Chave inválida!**", ephemeral=True)
+                return
+            
+            totp = pyotp.TOTP(chave)
+            codigo = totp.now()
+            tempo_restante = totp.interval - (int(time.time()) % totp.interval)
+            
+            embed = discord.Embed(
+                title="🔐 **CÓDIGO 2FA GERADO**",
+                description=f"```{codigo}```",
+                color=0x00ff88,
+                timestamp=datetime.now()
+            )
+            embed.add_field(name="⏰ **EXPIRA EM:**", value=f"{tempo_restante} segundos", inline=True)
+            embed.set_footer(text="Use o botão novamente para gerar um novo código.")
+            
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            
+        except Exception as e:
+            print(f"❌ Erro modal 2FA: {e}")
+            await interaction.followup.send("❌ **Erro ao gerar código!**", ephemeral=True)
+
+
+class Botao2FAView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+    
+    @discord.ui.button(label="📋 2FA", style=discord.ButtonStyle.primary, emoji="🔐")
+    async def botao_2fa(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(Modal2FA())
+
+
+@bot.tree.command(name="criar_modal_2fa", description="[ADMIN] Criar mensagem com botão 2FA no canal atual")
+async def criar_modal_2fa(interaction: discord.Interaction):
+    if interaction.user.id != MEU_ID:
+        await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
+        return
+    
+    embed = discord.Embed(
+        title="🔐 **GERADOR DE CÓDIGOS 2FA**",
+        description="Clique no botão abaixo e cole sua chave 2FA.",
+        color=0x2b2d31,
+        timestamp=datetime.now()
+    )
+    
+    embed.add_field(
+        name="📌 **COMO FUNCIONA:**",
+        value="1️⃣ Clique no botão **2FA**\n2️⃣ Cole sua chave\n3️⃣ Receba o código",
+        inline=False
+    )
+    
+    view = Botao2FAView()
+    
+    await interaction.response.send_message(embed=embed, view=view)
+
+# ===============================
+# WEBHOOK
 # ===============================
 app = Flask(__name__)
 
@@ -1373,11 +1455,7 @@ def webhook():
                                                 )
                                                 print(f"🎉 Produto automático entregue: {item}")
                                             except discord.Forbidden:
-                                                print(f"⚠️ DM fechada para {user.name}. Avisando no canal...")
-                                                canal_pagos = bot.get_channel(CANAL_PAGOS)
-                                                if canal_pagos:
-                                                    await canal_pagos.send(f"⚠️ {user.mention}, seu pagamento de **{produto_info['nome']}** foi aprovado, mas sua DM está fechada! Abra um ticket para receber seu produto.")
-                                                # Devolve pro estoque
+                                                print(f"⚠️ DM fechada para {user.name}.")
                                                 with estoque_lock:
                                                     if variacao_nome:
                                                         estoque_disponivel[produto_id]["variacoes"][variacao_nome].insert(0, item)
