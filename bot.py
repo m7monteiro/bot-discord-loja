@@ -1248,8 +1248,9 @@ def home():
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    print("\n" + "🔔" * 20)
-    print("WEBHOOK ACIONADO!")
+    start_time = time.time()
+    print("\n" + "⚡" * 20)
+    print(f"WEBHOOK RECEBIDO ÀS {datetime.now().strftime('%H:%M:%S')}")
     
     # Tenta pegar os dados de várias formas (JSON, Form, Args)
     data = {}
@@ -1311,22 +1312,33 @@ def webhook():
                     print(f"🔗 External reference: {ref}")
                     
                     if ref:
+                        # Melhoria no parsing: O external_reference é gerado como: {produto_id}_{user_id}_{timestamp}
+                        # Ou para variações: {produto_id}_{variacao}_{user_id}_{timestamp}
                         partes = ref.split('_')
-                        if len(partes) >= 2:
-                            produto_id = partes[0]
-                            variacao_nome = None
-                            if len(partes) == 4:
-                                variacao_nome = partes[1]
-                                user_id = int(partes[2])
+                        print(f"🧩 Partes da referência: {partes}")
+                        
+                        if len(partes) >= 3:
+                            # O último é sempre o timestamp, o penúltimo é sempre o user_id
+                            user_id = int(partes[-2])
+                            timestamp = partes[-1]
+                            
+                            # O que sobrar no início é o produto e a variação
+                            # Se tiver 3 partes: [produto, user_id, timestamp]
+                            # Se tiver 4 partes: [produto, variacao, user_id, timestamp]
+                            if len(partes) == 3:
+                                produto_id = partes[0]
+                                variacao_nome = None
                             else:
-                                user_id = int(partes[1])
+                                produto_id = partes[0]
+                                variacao_nome = partes[1]
                             
                             print(f"📦 Produto ID: {produto_id}")
                             print(f"👤 User ID: {user_id}")
                             
-                            if user_id == MEU_ID:
-                                print("⚠️ Pagamento do próprio dono, ignorando")
-                                return "OK", 200
+                            # REMOVIDO: Trava de pagamento do próprio dono para permitir testes
+                            # if user_id == MEU_ID:
+                            #     print("⚠️ Pagamento do próprio dono, ignorando")
+                            #     return "OK", 200
                             
                             user = bot.get_user(user_id)
                             if not user:
@@ -1349,13 +1361,15 @@ def webhook():
                                     if item:
                                         async def enviar_dm():
                                             try:
+                                                # Prioridade máxima no envio da DM
                                                 await user.send(
                                                     f"✅ **Pagamento confirmado!**\n\n"
                                                     f"📦 **{produto_info['nome']}**\n\n"
                                                     f"🔐 **Seu produto:**\n```{item}```\n\n"
                                                     "✅ Obrigado pela preferência!"
                                                 )
-                                                print(f"🎉 Produto automático entregue: {item}")
+                                                process_time = time.time() - start_time
+                                                print(f"🚀 ENTREGA REALIZADA EM {process_time:.2f} SEGUNDOS!")
                                             except discord.Forbidden:
                                                 print(f"⚠️ DM fechada para {user.name}. Avisando no canal...")
                                                 canal_pagos = bot.get_channel(CANAL_PAGOS)
