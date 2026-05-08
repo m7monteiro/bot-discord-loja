@@ -1248,25 +1248,43 @@ def home():
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    print("=" * 50)
-    print("🔔 WEBHOOK ACIONADO!")
-    print("=" * 50)
+    print("\n" + "🔔" * 20)
+    print("WEBHOOK ACIONADO!")
     
-    data = request.json if request.is_json else request.form.to_dict()
-    print(f"📩 Webhook recebido: {data}")
+    # Tenta pegar os dados de várias formas (JSON, Form, Args)
+    data = {}
+    if request.is_json:
+        data = request.json
+    elif request.form:
+        data = request.form.to_dict()
     
+    print(f"📩 Dados recebidos: {json.dumps(data, indent=2)}")
+    
+    # O Mercado Pago envia o ID de formas diferentes dependendo do tipo de evento
     payment_id = None
-    if data and isinstance(data, dict):
-        payment_id = data.get('data', {}).get('id') or data.get('id')
     
+    # 1. Tenta extrair de data.id (comum em notificações de pagamento)
+    if isinstance(data, dict):
+        payment_id = data.get('data', {}).get('id')
+        
+        # 2. Tenta extrair do ID direto (comum em outros eventos)
+        if not payment_id:
+            payment_id = data.get('id')
+            
+        # 3. Tenta extrair de resource (alguns webhooks enviam a URL do recurso)
+        if not payment_id and 'resource' in data:
+            resource = data.get('resource', '')
+            payment_id = resource.split('/')[-1] if '/' in resource else None
+
+    # 4. Tenta extrair dos parâmetros da URL (Query Args)
     if not payment_id:
         payment_id = request.args.get('id') or request.args.get('data.id')
     
     if not payment_id:
-        print("❌ Não foi possível extrair o payment_id")
+        print("⚠️ Webhook recebido, mas nenhum ID de pagamento encontrado. Pode ser um teste do MP.")
         return "OK", 200
     
-    print(f"💰 Payment ID encontrado: {payment_id}")
+    print(f"💰 ID de Pagamento Identificado: {payment_id}")
 
     with webhook_lock:
         if str(payment_id) in pagamentos_processados:
