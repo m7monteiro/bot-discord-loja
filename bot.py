@@ -1001,7 +1001,7 @@ async def editar_imagem(interaction: discord.Interaction, produto_id: str, url_i
         await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
         return
     
-    if produit_id not in produtos_disponiveis:
+    if produto_id not in produtos_disponiveis:
         await interaction.response.send_message(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
         return
     
@@ -1235,6 +1235,23 @@ async def fazer_backup(interaction: discord.Interaction):
     )
 
 # ===============================
+# COMANDO SYNC (FORÇAR SINCRONIZAÇÃO)
+# ===============================
+
+@bot.tree.command(name="sync", description="[ADMIN] Forçar sincronização dos comandos")
+async def sync_commands(interaction: discord.Interaction):
+    if interaction.user.id != MEU_ID:
+        await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
+        return
+    
+    await interaction.response.defer(ephemeral=True)
+    
+    # Sincroniza os comandos globalmente
+    await bot.tree.sync()
+    
+    await interaction.followup.send("✅ **Comandos sincronizados!** Aguarde alguns segundos e teste `/criar_modal_2fa`.", ephemeral=True)
+
+# ===============================
 # COMANDO 2FA (VERSÃO SIMPLES)
 # ===============================
 @bot.tree.command(name="2fa", description="Gerar código 2FA a partir da chave")
@@ -1302,6 +1319,39 @@ class Modal2FA(discord.ui.Modal, title="🔐 Gerador de Código 2FA"):
         except Exception as e:
             print(f"❌ Erro modal 2FA: {e}")
             await interaction.followup.send("❌ **Erro ao gerar código!**", ephemeral=True)
+
+
+class Botao2FAView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+    
+    @discord.ui.button(label="📋 2FA", style=discord.ButtonStyle.primary, emoji="🔐")
+    async def botao_2fa(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(Modal2FA())
+
+
+@bot.tree.command(name="criar_modal_2fa", description="[ADMIN] Criar mensagem com botão 2FA no canal atual")
+async def criar_modal_2fa(interaction: discord.Interaction):
+    if interaction.user.id != MEU_ID:
+        await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
+        return
+    
+    embed = discord.Embed(
+        title="🔐 **GERADOR DE CÓDIGOS 2FA**",
+        description="Clique no botão abaixo e cole sua chave 2FA.",
+        color=0x2b2d31,
+        timestamp=datetime.now()
+    )
+    
+    embed.add_field(
+        name="📌 **COMO FUNCIONA:**",
+        value="1️⃣ Clique no botão **2FA**\n2️⃣ Cole sua chave\n3️⃣ Receba o código",
+        inline=False
+    )
+    
+    view = Botao2FAView()
+    
+    await interaction.response.send_message(embed=embed, view=view)
 
 # ===============================
 # WEBHOOK
