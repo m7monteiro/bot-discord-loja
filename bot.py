@@ -116,43 +116,65 @@ print(f"📦 {len(produtos_disponiveis)} produtos carregados")
 sdk = mercadopago.SDK(MP_ACCESS_TOKEN)
 
 def criar_pagamento_pix_com_preco(user_id, produto_id, preco, nome_produto):
-    # Correção: Garante que o preço seja float e arredondado para 2 casas decimais
+    """Gera um pagamento PIX com logs detalhados para diagnóstico"""
     try:
-        preco = float(preco)
-    except:
-        print(f"❌ Erro: Preço inválido: {preco}")
-        return None
+        # 1. Validação e formatação do preço (deve ser float com 2 casas)
+        preco_formatado = round(float(preco), 2)
+        
+        # 2. Preparação dos dados (Adicionando campos de identificação que o MP exige em algumas contas)
+        payment_data = {
+            "transaction_amount": preco_formatado,
+            "description": f"Compra: {nome_produto}"[:60],
+            "payment_method_id": "pix",
+            "payer": {
+                "email": f"c_{user_id}@cliente.com",
+                "first_name": "Cliente",
+                "last_name": str(user_id)
+            },
+            "external_reference": f"{produto_id}_{user_id}_{int(time.time())}",
+            "installments": 1
+        }
 
-    payment_data = {
-        "transaction_amount": preco,
-        "description": nome_produto[:60], # Limite de caracteres do MP
-        "payment_method_id": "pix",
-        "payer": {"email": f"cliente_{user_id}@temp.com"},
-        "external_reference": f"{produto_id}_{user_id}_{int(time.time())}",
-        "notification_url": WEBHOOK_URL
-    }
-    
-    try:
+        # Só adiciona notification_url se ela começar com https (exigência do MP)
+        if WEBHOOK_URL and WEBHOOK_URL.startswith("https"):
+            payment_data["notification_url"] = WEBHOOK_URL
+
+        print(f"🔍 Tentando gerar PIX de R$ {preco_formatado} para o produto {produto_id}...")
+        
+        # 3. Chamada à API
         result = sdk.payment().create(payment_data)
         
-        if result["status"] == 201:
-            payment = result["response"]
-            pix_data = payment["point_of_interaction"]["transaction_data"]
+        # 4. Análise do Resultado
+        status_code = result.get("status")
+        response_data = result.get("response")
+
+        if status_code in [200, 201]:
+            payment = response_data
+            pix_data = payment.get("point_of_interaction", {}).get("transaction_data", {})
             
+            print(f"✅ PIX Gerado com sucesso! ID: {payment.get('id')}")
             return {
-                "qr_code": pix_data["qr_code"],
-                "qr_code_base64": pix_data["qr_code_base64"],
-                "expiration": payment["date_of_expiration"],
+                "qr_code": pix_data.get("qr_code"),
+                "qr_code_base64": pix_data.get("qr_code_base64"),
+                "expiration": payment.get("date_of_expiration"),
                 "produto": nome_produto,
-                "preco": preco,
-                "payment_id": payment["id"],
+                "preco": preco_formatado,
+                "payment_id": payment.get("id"),
                 "produto_id": produto_id
             }
         else:
-            print(f"❌ Erro MP (Status {result['status']}): {result['response']}")
+            # LOG SUPER DETALHADO PARA O USUÁRIO
+            print("\n" + "!"*30)
+            print(f"❌ ERRO NA API DO MERCADO PAGO")
+            print(f"Status Code: {status_code}")
+            print(f"Resposta: {json.dumps(response_data, indent=2)}")
+            print("!"*30 + "\n")
             return None
+
     except Exception as e:
-        print(f"❌ Erro PIX: {e}")
+        print(f"❌ ERRO CRÍTICO NO CÓDIGO DE PAGAMENTO: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 # ===============================
