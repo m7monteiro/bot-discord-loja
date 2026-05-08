@@ -1001,7 +1001,7 @@ async def editar_imagem(interaction: discord.Interaction, produto_id: str, url_i
         await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
         return
     
-    if produto_id not in produtos_disponiveis:
+    if produit_id not in produtos_disponiveis:
         await interaction.response.send_message(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
         return
     
@@ -1289,7 +1289,7 @@ class Modal2FA(discord.ui.Modal, title="🔐 Gerador de Código 2FA"):
             tempo_restante = totp.interval - (int(time.time()) % totp.interval)
             
             embed = discord.Embed(
-                title="🔐 **CÓDIGO 2FA GERADO**",
+                title="🔐 **CÓDIGO 2FA GERADO**,
                 description=f"```{codigo}```",
                 color=0x00ff88,
                 timestamp=datetime.now()
