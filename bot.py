@@ -788,7 +788,7 @@ async def listar_produtos(interaction: discord.Interaction):
 # ===============================
 
 async def criar_embed_produto_tzada(produto_id: str, produto_info: dict):
-    """Cria dois embeds estilo Tzada Store: 1) Banner no topo, 2) Conteúdo embaixo"""
+    """Cria um único embed estilo Tzada Store com imagem no topo e texto embaixo"""
     try:
         imagem_url = produto_info.get('imagem', '')
         qtd_variacoes = len(produto_info.get("variacoes", []))
@@ -810,30 +810,30 @@ async def criar_embed_produto_tzada(produto_id: str, produto_info: dict):
         if produto_info.get('tipo') == 'auto':
             estoque_info = f"\n📦 Estoque: {qtd_estoque} unidades"
         
-        embeds_list = []
-        
-        # ✅ EMBED 1: APENAS A IMAGEM (BANNER NO TOPO)
-        if imagem_url and imagem_url != "":
-            embed_banner = discord.Embed(color=0xffa500)
-            embed_banner.set_image(url=imagem_url)
-            embeds_list.append(embed_banner)
-        
-        # ✅ EMBED 2: TÍTULO, DESCRIÇÃO E CAMPOS
-        embed_conteudo = discord.Embed(
-            title=f"⚡ {tipo_entrega}",
-            description=f"**{produto_info['nome']}**\n\n{descricao_formatada}{estoque_info}",
+        # ✅ CRIAR UM Único EMBED COM IMAGEM NO TOPO
+        embed = discord.Embed(
             color=0xffa500  # Laranja vibrante como Tzada
         )
         
+        # ✅ ADICIONAR IMAGEM COMO THUMBNAIL (PEQUENA NO CANTO)
+        # Depois vamos usar set_image para forçar no topo
+        if imagem_url and imagem_url != "":
+            # Usar set_image para forçar a imagem no topo
+            embed.set_image(url=imagem_url)
+        
+        # ✅ ADICIONAR TÍTULO E DESCRIÇÃO
+        embed.title = f"⚡ {tipo_entrega}"
+        embed.description = f"**{produto_info['nome']}**\n\n{descricao_formatada}{estoque_info}"
+        
         # Campos de Valor e Estoque lado a lado
-        embed_conteudo.add_field(
+        embed.add_field(
             name="💰 Valor à vista",
             value=f"R$ {produto_info['preco']:.2f}",
             inline=True
         )
         
         if produto_info.get('tipo') == 'auto':
-            embed_conteudo.add_field(
+            embed.add_field(
                 name="📦 Restam",
                 value=f"{qtd_estoque}",
                 inline=True
@@ -841,21 +841,19 @@ async def criar_embed_produto_tzada(produto_id: str, produto_info: dict):
         
         # Adicionar variações se houver
         if qtd_variacoes > 0:
-            embed_conteudo.add_field(
+            embed.add_field(
                 name="🎮 Opções Disponíveis",
                 value=f"{qtd_variacoes} variações",
                 inline=True
             )
         
-        embed_conteudo.set_footer(text="M7 STORE - Clique no botão abaixo para comprar!")
-        embed_conteudo.timestamp = datetime.now()
+        embed.set_footer(text="M7 STORE - Clique no botão abaixo para comprar!")
+        embed.timestamp = datetime.now()
         
-        embeds_list.append(embed_conteudo)
-        
-        return embeds_list  # Retorna lista de embeds
+        return embed  # Retorna um único embed
     except Exception as e:
         print(f"❌ Erro ao criar embed Tzada: {e}")
-        return []
+        return None
 
 class ProdutoCompraView(discord.ui.View):
     def __init__(self, produto_id: str, produto_nome: str, variacoes: list = None):
@@ -961,19 +959,15 @@ async def configurar_produto(
         if not canal:
             canal = await guild.create_text_channel(nome_canal)
         
-        embeds = await criar_embed_produto_tzada(produto_id, produto_info)
-        if not embeds:
+        embed = await criar_embed_produto_tzada(produto_id, produto_info)
+        if not embed:
             await interaction.followup.send("❌ Erro ao criar embed do produto.", ephemeral=True)
             return
             
         view = ProdutoCompraView(produto_id, produto_info['nome'], produto_info.get('variacoes', []))
         
         await canal.purge(limit=10)
-        # Enviar embeds (pode ser 1 ou 2) e depois o view com o botão
-        if len(embeds) > 1:
-            await canal.send(embeds=embeds, view=view)
-        else:
-            await canal.send(embed=embeds[0], view=view)
+        await canal.send(embed=embed, view=view)
         
         await interaction.followup.send(f"✅ Canal {canal.mention} configurado para o produto `{produto_info['nome']}`!", ephemeral=True)
     except Exception as e:
@@ -1000,19 +994,15 @@ async def sincronizar_canal(interaction: discord.Interaction, produto_id: str):
         produto_info = produtos_disponiveis[produto_id]
         canal = interaction.channel
         
-        embeds = await criar_embed_produto_tzada(produto_id, produto_info)
-        if not embeds:
+        embed = await criar_embed_produto_tzada(produto_id, produto_info)
+        if not embed:
             await interaction.followup.send("❌ Erro ao criar embed do produto.", ephemeral=True)
             return
             
         view = ProdutoCompraView(produto_id, produto_info['nome'], produto_info.get('variacoes', []))
         
         await canal.purge(limit=5)
-        # Enviar embeds (pode ser 1 ou 2) e depois o view com o botão
-        if len(embeds) > 1:
-            await canal.send(embeds=embeds, view=view)
-        else:
-            await canal.send(embed=embeds[0], view=view)
+        await canal.send(embed=embed, view=view)
         
         await interaction.followup.send(f"✅ Canal sincronizado!", ephemeral=True)
     except Exception as e:
