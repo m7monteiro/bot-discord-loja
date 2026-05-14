@@ -958,15 +958,19 @@ async def configurar_produto(
         if not canal:
             canal = await guild.create_text_channel(nome_canal)
         
-        embed = await criar_embed_produto_tzada(produto_id, produto_info)
-        if not embed:
+        embeds = await criar_embeds_produto_tzada(produto_id, produto_info)
+        if not embeds:
             await interaction.followup.send("❌ Erro ao criar embed do produto.", ephemeral=True)
             return
             
         view = ProdutoCompraView(produto_id, produto_info['nome'], produto_info.get('variacoes', []))
         
         await canal.purge(limit=10)
-        await canal.send(embed=embed, view=view)
+        # Enviar embeds (pode ser 1 ou 2) e depois o view com o botão
+        if len(embeds) > 1:
+            await canal.send(embeds=embeds, view=view)
+        else:
+            await canal.send(embed=embeds[0], view=view)
         
         await interaction.followup.send(f"✅ Canal {canal.mention} configurado para o produto `{produto_info['nome']}`!", ephemeral=True)
     except Exception as e:
@@ -993,15 +997,19 @@ async def sincronizar_canal(interaction: discord.Interaction, produto_id: str):
         produto_info = produtos_disponiveis[produto_id]
         canal = interaction.channel
         
-        embed = await criar_embed_produto_tzada(produto_id, produto_info)
-        if not embed:
+        embeds = await criar_embeds_produto_tzada(produto_id, produto_info)
+        if not embeds:
             await interaction.followup.send("❌ Erro ao criar embed do produto.", ephemeral=True)
             return
             
         view = ProdutoCompraView(produto_id, produto_info['nome'], produto_info.get('variacoes', []))
         
         await canal.purge(limit=5)
-        await canal.send(embed=embed, view=view)
+        # Enviar embeds (pode ser 1 ou 2) e depois o view com o botão
+        if len(embeds) > 1:
+            await canal.send(embeds=embeds, view=view)
+        else:
+            await canal.send(embed=embeds[0], view=view)
         
         await interaction.followup.send(f"✅ Canal sincronizado!", ephemeral=True)
     except Exception as e:
