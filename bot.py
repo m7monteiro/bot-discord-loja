@@ -1005,13 +1005,13 @@ async def configurar_produto(
         except:
             pass
 
-@bot.tree.command(name="remover_estoque", description="🗑️ Remove itens do estoque de um produto")
+@bot.tree.command(name="remover_estoque", description="🗑️ Remove itens específicos do estoque de um produto")
 @app_commands.describe(
     produto_id="ID do produto",
-    quantidade="Quantidade de itens a remover (deixe em branco para remover 1)",
+    indice="Número do item a remover (veja com /ver_estoque)",
     variacao="Nome da variação (deixe em branco para produto sem variações)"
 )
-async def remover_estoque(interaction: discord.Interaction, produto_id: str, quantidade: int = 1, variacao: str = None):
+async def remover_estoque(interaction: discord.Interaction, produto_id: str, indice: int, variacao: str = None):
     await interaction.response.defer(ephemeral=True)
     
     try:
@@ -1036,19 +1036,21 @@ async def remover_estoque(interaction: discord.Interaction, produto_id: str, qua
                 
                 lista_itens = produto_estoque["variacoes"][variacao]
                 
-                # Remover a quantidade especificada
-                removidos = 0
-                for _ in range(quantidade):
-                    if lista_itens:
-                        lista_itens.pop(0)  # Remove o primeiro item
-                        removidos += 1
-                    else:
-                        break
+                # Validar o índice
+                if indice < 0 or indice >= len(lista_itens):
+                    await interaction.followup.send(
+                        f"❌ Índice `{indice}` inválido! O estoque tem apenas **{len(lista_itens)}** itens (0 a {len(lista_itens)-1}).",
+                        ephemeral=True
+                    )
+                    return
                 
+                # Remover o item específico
+                item_removido = lista_itens.pop(indice)
                 salvar_estoque(estoque_disponivel)
                 
                 await interaction.followup.send(
-                    f"✅ **{removidos}** item(ns) removido(s) da variação `{variacao}` do produto `{produto_id}`!\n"
+                    f"✅ Item **#{indice}** removido da variação `{variacao}` do produto `{produto_id}`!\n"
+                    f"🗑️ Item removido: `{item_removido}`\n"
                     f"📦 Estoque restante: **{len(lista_itens)}** itens",
                     ephemeral=True
                 )
@@ -1056,19 +1058,21 @@ async def remover_estoque(interaction: discord.Interaction, produto_id: str, qua
                 # Sem variação
                 lista_itens = produto_estoque.get("itens", [])
                 
-                # Remover a quantidade especificada
-                removidos = 0
-                for _ in range(quantidade):
-                    if lista_itens:
-                        lista_itens.pop(0)  # Remove o primeiro item
-                        removidos += 1
-                    else:
-                        break
+                # Validar o índice
+                if indice < 0 or indice >= len(lista_itens):
+                    await interaction.followup.send(
+                        f"❌ Índice `{indice}` inválido! O estoque tem apenas **{len(lista_itens)}** itens (0 a {len(lista_itens)-1}).",
+                        ephemeral=True
+                    )
+                    return
                 
+                # Remover o item específico
+                item_removido = lista_itens.pop(indice)
                 salvar_estoque(estoque_disponivel)
                 
                 await interaction.followup.send(
-                    f"✅ **{removidos}** item(ns) removido(s) do produto `{produto_id}`!\n"
+                    f"✅ Item **#{indice}** removido do produto `{produto_id}`!\n"
+                    f"🗑️ Item removido: `{item_removido}`\n"
                     f"📦 Estoque restante: **{len(lista_itens)}** itens",
                     ephemeral=True
                 )
