@@ -958,7 +958,7 @@ async def configurar_produto(
         if not canal:
             canal = await guild.create_text_channel(nome_canal)
         
-        embeds = await criar_embeds_produto_tzada(produto_id, produto_info)
+        embeds = await criar_embed_produto_tzada(produto_id, produto_info)
         if not embeds:
             await interaction.followup.send("❌ Erro ao criar embed do produto.", ephemeral=True)
             return
@@ -997,7 +997,7 @@ async def sincronizar_canal(interaction: discord.Interaction, produto_id: str):
         produto_info = produtos_disponiveis[produto_id]
         canal = interaction.channel
         
-        embeds = await criar_embeds_produto_tzada(produto_id, produto_info)
+        embeds = await criar_embed_produto_tzada(produto_id, produto_info)
         if not embeds:
             await interaction.followup.send("❌ Erro ao criar embed do produto.", ephemeral=True)
             return
