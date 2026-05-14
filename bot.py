@@ -1005,6 +1005,78 @@ async def configurar_produto(
         except:
             pass
 
+@bot.tree.command(name="remover_estoque", description="🗑️ Remove itens do estoque de um produto")
+@app_commands.describe(
+    produto_id="ID do produto",
+    quantidade="Quantidade de itens a remover (deixe em branco para remover 1)",
+    variacao="Nome da variação (deixe em branco para produto sem variações)"
+)
+async def remover_estoque(interaction: discord.Interaction, produto_id: str, quantidade: int = 1, variacao: str = None):
+    await interaction.response.defer(ephemeral=True)
+    
+    try:
+        # Verificar se é admin
+        if interaction.user.id != MEU_ID and CARGO_ADMIN not in [role.id for role in interaction.user.roles]:
+            await interaction.followup.send("❌ Apenas administradores podem remover estoque!", ephemeral=True)
+            return
+        
+        # Verificar se o produto existe
+        if produto_id not in estoque_disponivel:
+            await interaction.followup.send(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
+            return
+        
+        with estoque_lock:
+            produto_estoque = estoque_disponivel[produto_id]
+            
+            # Se tem variação
+            if variacao:
+                if variacao not in produto_estoque.get("variacoes", {}):
+                    await interaction.followup.send(f"❌ Variação `{variacao}` não encontrada para o produto `{produto_id}`!", ephemeral=True)
+                    return
+                
+                lista_itens = produto_estoque["variacoes"][variacao]
+                
+                # Remover a quantidade especificada
+                removidos = 0
+                for _ in range(quantidade):
+                    if lista_itens:
+                        lista_itens.pop(0)  # Remove o primeiro item
+                        removidos += 1
+                    else:
+                        break
+                
+                salvar_estoque(estoque_disponivel)
+                
+                await interaction.followup.send(
+                    f"✅ **{removidos}** item(ns) removido(s) da variação `{variacao}` do produto `{produto_id}`!\n"
+                    f"📦 Estoque restante: **{len(lista_itens)}** itens",
+                    ephemeral=True
+                )
+            else:
+                # Sem variação
+                lista_itens = produto_estoque.get("itens", [])
+                
+                # Remover a quantidade especificada
+                removidos = 0
+                for _ in range(quantidade):
+                    if lista_itens:
+                        lista_itens.pop(0)  # Remove o primeiro item
+                        removidos += 1
+                    else:
+                        break
+                
+                salvar_estoque(estoque_disponivel)
+                
+                await interaction.followup.send(
+                    f"✅ **{removidos}** item(ns) removido(s) do produto `{produto_id}`!\n"
+                    f"📦 Estoque restante: **{len(lista_itens)}** itens",
+                    ephemeral=True
+                )
+    except Exception as e:
+        print(f"❌ Erro ao remover estoque: {e}")
+        await interaction.followup.send(f"❌ Erro ao remover estoque: {e}", ephemeral=True)
+
+
 @bot.tree.command(name="sincronizar_canal", description="[ADMIN] Atualizar embed de um canal existente")
 @app_commands.describe(produto_id="ID do produto")
 async def sincronizar_canal(interaction: discord.Interaction, produto_id: str):
