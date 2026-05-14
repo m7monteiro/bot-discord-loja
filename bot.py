@@ -788,7 +788,7 @@ async def listar_produtos(interaction: discord.Interaction):
 # ===============================
 
 async def criar_embed_produto_tzada(produto_id: str, produto_info: dict):
-    """Cria um embed estilo Tzada Store com BANNER GRANDE NO TOPO"""
+    """Cria dois embeds estilo Tzada Store: 1) Banner no topo, 2) Conteúdo embaixo"""
     try:
         imagem_url = produto_info.get('imagem', '')
         qtd_variacoes = len(produto_info.get("variacoes", []))
@@ -810,29 +810,30 @@ async def criar_embed_produto_tzada(produto_id: str, produto_info: dict):
         if produto_info.get('tipo') == 'auto':
             estoque_info = f"\n📦 Estoque: {qtd_estoque} unidades"
         
-        # ✅ TRUQUE: Usar um embed com APENAS a imagem no topo
-        # Isso força o Discord a colocar a imagem no topo e o resto embaixo
-        embed = discord.Embed(
+        embeds_list = []
+        
+        # ✅ EMBED 1: APENAS A IMAGEM (BANNER NO TOPO)
+        if imagem_url and imagem_url != "":
+            embed_banner = discord.Embed(color=0xffa500)
+            embed_banner.set_image(url=imagem_url)
+            embeds_list.append(embed_banner)
+        
+        # ✅ EMBED 2: TÍTULO, DESCRIÇÃO E CAMPOS
+        embed_conteudo = discord.Embed(
+            title=f"⚡ {tipo_entrega}",
+            description=f"**{produto_info['nome']}**\n\n{descricao_formatada}{estoque_info}",
             color=0xffa500  # Laranja vibrante como Tzada
         )
         
-        # ✅ COLOCAR A IMAGEM PRIMEIRO (vai aparecer no topo)
-        if imagem_url and imagem_url != "":
-            embed.set_image(url=imagem_url)
-        
-        # ✅ DEPOIS ADICIONAR O TÍTULO E DESCRIÇÃO
-        embed.title = f"⚡ {tipo_entrega}"
-        embed.description = f"**{produto_info['nome']}**\n\n{descricao_formatada}{estoque_info}"
-        
         # Campos de Valor e Estoque lado a lado
-        embed.add_field(
+        embed_conteudo.add_field(
             name="💰 Valor à vista",
             value=f"R$ {produto_info['preco']:.2f}",
             inline=True
         )
         
         if produto_info.get('tipo') == 'auto':
-            embed.add_field(
+            embed_conteudo.add_field(
                 name="📦 Restam",
                 value=f"{qtd_estoque}",
                 inline=True
@@ -840,19 +841,21 @@ async def criar_embed_produto_tzada(produto_id: str, produto_info: dict):
         
         # Adicionar variações se houver
         if qtd_variacoes > 0:
-            embed.add_field(
+            embed_conteudo.add_field(
                 name="🎮 Opções Disponíveis",
                 value=f"{qtd_variacoes} variações",
                 inline=True
             )
         
-        embed.set_footer(text="M7 STORE - Clique no botão abaixo para comprar!")
-        embed.timestamp = datetime.now()
+        embed_conteudo.set_footer(text="M7 STORE - Clique no botão abaixo para comprar!")
+        embed_conteudo.timestamp = datetime.now()
         
-        return embed
+        embeds_list.append(embed_conteudo)
+        
+        return embeds_list  # Retorna lista de embeds
     except Exception as e:
         print(f"❌ Erro ao criar embed Tzada: {e}")
-        return None
+        return []
 
 class ProdutoCompraView(discord.ui.View):
     def __init__(self, produto_id: str, produto_nome: str, variacoes: list = None):
