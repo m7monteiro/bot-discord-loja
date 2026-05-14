@@ -258,7 +258,7 @@ async def log_carrinho_ativo(user, produto_nome, valor, pagamento_id):
         print(f"❌ Erro log carrinho: {e}")
         return None
 
-async def log_pagamento_confirmado(user, produto_nome, valor, pagamento_id):
+async def log_pagamento_confirmado(user, produto_nome, valor, pagamento_id, item_entregue=None):
     try:
         canal_pagos = bot.get_channel(CANAL_PAGOS)
         if not canal_pagos:
@@ -275,19 +275,47 @@ async def log_pagamento_confirmado(user, produto_nome, valor, pagamento_id):
         embed.add_field(name="Valor", value=f"R$ {valor:.2f}", inline=True)
         embed.add_field(name="Horário", value=datetime.now().strftime("%d/%m/%Y %H:%M:%S"), inline=False)
         embed.add_field(name="Pagamento", value=f"`{pagamento_id}`", inline=False)
+        
+        # ✅ NOVO: Mostrar o item entregue se disponível
+        if item_entregue:
+            embed.add_field(
+                name="🔐 Item Entregue",
+                value=f"```{item_entregue}```",
+                inline=False
+            )
+        
         embed.set_footer(text="🎉 Produto entregue com sucesso!")
         
         await canal_pagos.send(embed=embed)
         
+        # ✅ ATUALIZAR O CARRINHO: Editar a mensagem do carrinho ativo para mostrar aprovação
         if str(pagamento_id) in carrinhos_ativos:
             dados = carrinhos_ativos[str(pagamento_id)]
             canal_carrinho = bot.get_channel(dados["canal"])
             if canal_carrinho:
                 try:
                     msg = await canal_carrinho.fetch_message(dados["mensagem_id"])
-                    await msg.delete()
-                except:
-                    pass
+                    # Editar a mensagem para mostrar que foi aprovada
+                    embed_aprovado = discord.Embed(
+                        title="✅ PAGAMENTO APROVADO",
+                        description=f"Cliente: {user.mention}\nProduto: {produto_nome}\nValor: R$ {valor:.2f}",
+                        color=0x00ff88,
+                        timestamp=datetime.now()
+                    )
+                    if item_entregue:
+                        embed_aprovado.add_field(
+                            name="🔐 Item Entregue",
+                            value=f"```{item_entregue}```",
+                            inline=False
+                        )
+                    embed_aprovado.set_footer(text="🎉 Entregue com sucesso!")
+                    await msg.edit(embed=embed_aprovado)
+                except Exception as e:
+                    print(f"Erro ao editar mensagem do carrinho: {e}")
+                    try:
+                        await msg.delete()
+                    except:
+                        pass
             del carrinhos_ativos[str(pagamento_id)]
     except Exception as e:
         print(f"❌ Erro log pagos: {e}")
@@ -1486,6 +1514,15 @@ def webhook():
                                                 )
                                                 process_time = time.time() - start_time
                                                 print(f"🚀 ENTREGA REALIZADA EM {process_time:.2f} SEGUNDOS!")
+                                                
+                                                # ✅ NOVO: Atualizar o carrinho com o item entregue
+                                                await log_pagamento_confirmado(
+                                                    user=user,
+                                                    produto_nome=produto_info['nome'],
+                                                    valor=payment.get('transaction_amount', 0),
+                                                    pagamento_id=payment_id,
+                                                    item_entregue=item
+                                                )
                                             except discord.Forbidden:
                                                 print(f"⚠️ DM fechada para {user.name}. Avisando no canal...")
                                                 canal_pagos = bot.get_channel(CANAL_PAGOS)
