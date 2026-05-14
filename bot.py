@@ -788,7 +788,7 @@ async def listar_produtos(interaction: discord.Interaction):
 # ===============================
 
 async def criar_embed_produto_tzada(produto_id: str, produto_info: dict):
-    """Cria um embed estilo Tzada Store com design profissional - BANNER GRANDE"""
+    """Cria um embed estilo Tzada Store com BANNER GRANDE NO TOPO"""
     try:
         imagem_url = produto_info.get('imagem', '')
         qtd_variacoes = len(produto_info.get("variacoes", []))
@@ -810,13 +810,19 @@ async def criar_embed_produto_tzada(produto_id: str, produto_info: dict):
         if produto_info.get('tipo') == 'auto':
             estoque_info = f"\n📦 Estoque: {qtd_estoque} unidades"
         
-        # Criar embed com layout Tzada
+        # ✅ TRUQUE: Usar um embed com APENAS a imagem no topo
+        # Isso força o Discord a colocar a imagem no topo e o resto embaixo
         embed = discord.Embed(
-            title=f"⚡ {tipo_entrega}",
-            description=f"**{produto_info['nome']}**\n\n{descricao_formatada}{estoque_info}",
-            color=0xffa500,  # Laranja vibrante como Tzada
-            timestamp=datetime.now()
+            color=0xffa500  # Laranja vibrante como Tzada
         )
+        
+        # ✅ COLOCAR A IMAGEM PRIMEIRO (vai aparecer no topo)
+        if imagem_url and imagem_url != "":
+            embed.set_image(url=imagem_url)
+        
+        # ✅ DEPOIS ADICIONAR O TÍTULO E DESCRIÇÃO
+        embed.title = f"⚡ {tipo_entrega}"
+        embed.description = f"**{produto_info['nome']}**\n\n{descricao_formatada}{estoque_info}"
         
         # Campos de Valor e Estoque lado a lado
         embed.add_field(
@@ -840,11 +846,8 @@ async def criar_embed_produto_tzada(produto_id: str, produto_info: dict):
                 inline=True
             )
         
-        embed.set_footer(text="M7 STORE - Clique no botão abaixo para comprar! | Hoje às 01:33")
-        
-        # ✅ MUDANÇA PRINCIPAL: set_image em vez de set_thumbnail (BANNER GRANDE)
-        if imagem_url and imagem_url != "":
-            embed.set_image(url=imagem_url)
+        embed.set_footer(text="M7 STORE - Clique no botão abaixo para comprar!")
+        embed.timestamp = datetime.now()
         
         return embed
     except Exception as e:
