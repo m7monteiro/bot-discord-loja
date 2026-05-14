@@ -788,37 +788,37 @@ async def listar_produtos(interaction: discord.Interaction):
 # ===============================
 
 async def criar_embed_produto_tzada(produto_id: str, produto_info: dict):
-    """Cria um embed estilo Tzada Store com design profissional"""
+    """Cria um embed estilo Tzada Store com design profissional - BANNER GRANDE"""
     try:
         imagem_url = produto_info.get('imagem', '')
         qtd_variacoes = len(produto_info.get("variacoes", []))
         qtd_estoque = verificar_estoque(produto_id)
+        tipo_entrega = "🤖 Entrega Automática!" if produto_info.get('tipo') == 'auto' else "👨‍💼 Entrega Manual"
         
-        # Construir descrição com benefícios
+        # Construir descrição com benefícios (estilo Tzada)
         descricao = produto_info.get('descricao', 'Sem descrição')
         
-        # Se houver benefícios (separados por |), formatá-los
+        # Se houver benefícios (separados por |), formatá-los com checkmarks
         if '|' in descricao:
             beneficios = [b.strip() for b in descricao.split('|')]
             descricao_formatada = "\n".join([f"✅ {b}" for b in beneficios if b])
         else:
-            descricao_formatada = descricao
+            descricao_formatada = f"✅ {descricao}"
         
-        # Adicionar informações de variações e estoque
-        info_adicional = ""
-        if qtd_variacoes > 0:
-            info_adicional += f"\n🎮 {qtd_variacoes} opções disponíveis"
+        # Adicionar informações de estoque
+        estoque_info = ""
         if produto_info.get('tipo') == 'auto':
-            info_adicional += f"\n📊 Estoque: {qtd_estoque} unidades"
+            estoque_info = f"\n📦 Estoque: {qtd_estoque} unidades"
         
+        # Criar embed com layout Tzada
         embed = discord.Embed(
-            title=f"⚡ {produto_info['nome'].upper()}",
-            description=descricao_formatada + info_adicional,
-            color=0x2b2d31,
+            title=f"⚡ {tipo_entrega}",
+            description=f"**{produto_info['nome']}**\n\n{descricao_formatada}{estoque_info}",
+            color=0xffa500,  # Laranja vibrante como Tzada
             timestamp=datetime.now()
         )
         
-        # Campo de preço com destaque
+        # Campos de Valor e Estoque lado a lado
         embed.add_field(
             name="💰 Valor à vista",
             value=f"R$ {produto_info['preco']:.2f}",
@@ -827,15 +827,24 @@ async def criar_embed_produto_tzada(produto_id: str, produto_info: dict):
         
         if produto_info.get('tipo') == 'auto':
             embed.add_field(
-                name="📊 Restam",
+                name="📦 Restam",
                 value=f"{qtd_estoque}",
                 inline=True
             )
         
-        embed.set_footer(text="M7 STORE - Clique no botão abaixo para comprar!")
+        # Adicionar variações se houver
+        if qtd_variacoes > 0:
+            embed.add_field(
+                name="🎮 Opções Disponíveis",
+                value=f"{qtd_variacoes} variações",
+                inline=True
+            )
         
+        embed.set_footer(text="M7 STORE - Clique no botão abaixo para comprar! | Hoje às 01:33")
+        
+        # ✅ MUDANÇA PRINCIPAL: set_image em vez de set_thumbnail (BANNER GRANDE)
         if imagem_url and imagem_url != "":
-            embed.set_thumbnail(url=imagem_url)
+            embed.set_image(url=imagem_url)
         
         return embed
     except Exception as e:
