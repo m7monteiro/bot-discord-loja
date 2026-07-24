@@ -1223,7 +1223,52 @@ async def criar_produto(
 # COMANDO DE SINCRONIZAÇÃO DE ESTOQUE
 # ===============================
 
-@bot.tree.command(name="estoque", description="[ADMIN] Atualiza o estoque público de todos os produtos com base no inventário real.")
+# Mapeamento global de produtos -> ID da mensagem
+produtos_mensagens = {}
+
+@bot.tree.command(name="recriar_canais", description="[ADMIN] Cria canais de produtos e mapeia suas mensagens para o comando /estoque.")
+@app_commands.describe(produto_id="ID do produto")
+async def configurar_produto(interaction: discord.Interaction, produto_id: str):
+    try:
+        if interaction.user.id != MEU_ID and CARGO_ADMIN not in [role.id for role in interaction.user.roles]:
+            await interaction.response.send_message("❌ Apenas administradores podem usar este comando!", ephemeral=True)
+            return
+        
+        if produto_id not in produtos_disponiveis:
+            await interaction.response.send_message(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
+            return
+        
+        produto = produtos_disponiveis[produto_id]
+        guild = interaction.guild
+        if not guild:
+            await interaction.response.send_message("❌ Erro ao identificar o servidor!", ephemeral=True)
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        # Criar o canal
+        canal = await guild.create_text_channel(name=f"🛒 | {produto['nome']}")
+        
+        # Criar o embed e a view
+        embed = await criar_embed_produto_vendas(produto_id, produto)
+        view = ProdutoView(produto_id, produto)
+        
+        # Enviar a mensagem e salvar a ID no mapeamento
+        if embed and view:
+            msg = await canal.send(embed=embed, view=view)
+            produtos_mensagens[produto_id] = msg.id
+        
+        await interaction.followup.send(
+            f"✅ Canal e cartão criados com sucesso para o produto `{produto['nome']}`!\n"
+            f"O comando `/estoque` agora está habilitado para este produto.",
+            ephemeral=True
+        )
+        
+    except Exception as e:
+        print(f"❌ Erro ao configurar produto: {e}")
+        await interaction.followup.send(f"❌ Erro: {e}", ephemeral=True)
+
+@bot.tree.command(name="estoque", description="[ADMIN] Atualiza o estoque de todos os produtos mapeados com o inventário real.")
 async def sincronizar_estoque(interaction: discord.Interaction):
     try:
         if interaction.user.id != MEU_ID and CARGO_ADMIN not in [role.id for role in interaction.user.roles]:
@@ -1246,53 +1291,59 @@ async def sincronizar_estoque(interaction: discord.Interaction):
                     for variacao in produto_info.get("variacoes"):
                         qtd_estoque += verificar_estoque(produto_id, variacao.get("nome"))
                 
-                # 2. Encontrar a mensagem do produto no servidor
-                guild = interaction.guild
-                if not guild:
-                    continue
+                # 2. Procurar a ID da mensagem mapeada
+                msg_id = produtos_mensagens.get(produto_id)
                 
-                encontrado_e_atualizado = False
-                
-                # Iterar pelos canais de texto do servidor
-                for canal in guild.text_channels:
-                    try:
-                        # Buscar as últimas 50 mensagens do canal
-                        async for message in canal.history(limit=50):
-                            # Verificar se a mensagem é do bot e tem um embed com o título exato do produto
-                            if message.author == bot.user and message.embeds:
-                                for emb in message.embeds:
-                                    # Comparamos o título do embed com o nome do produto
-                                    if emb.title == produto_info.get("nome"):
-                                        
-                                        # Recriar o embed com o estoque real
-                                        embed = await criar_embed_produto_vendas(produto_id, produto_info)
-                                        
-                                        # Se o embed foi criado com sucesso e a mensagem tem o botão
-                                        if embed and message.view:
-                                            # Editar a mensagem no Discord
-                                            await message.edit(embed=embed, view=message.view)
-                                            encontrado_e_atualizado = True
-                                            atualizados += 1
-                                            break
-                                
-                                if encontrado_e_atualizado:
+                if not msg_id:
+                    # Se não mapeou, tenta achar o canal pelo nome (caso o bot tenha reiniciado)
+                    guild = interaction.guild
+                    for canal in guild.text_channels:
+                        if canal.name.endswith(f"| {produto_info.get('nome')}"):
+                            produtos_mensagens[produto_id] = None # Marca para não rodar em loop
+                            # Tenta achar a mensagem no canal
+                            async for message in canal.history(limit=5):
+                                if message.author == bot.user and message.embeds and any(
+                                    emb.title == produto_info.get("nome") for emb in message.embeds
+                                ):
+                                    produtos_mensagens[produto_id] = message.id
+                                    msg_id = message.id
                                     break
-                    except Exception as e:
-                        print(f"⚠️ Sem permissão ou erro ao ler canal {canal.name}: {e}")
+                            break
                 
-                if not encontrado_e_atualizado:
-                    print(f"❌ Canal ou embed do produto '{produto_info.get('nome')}' não encontrado!")
+                # 3. Se achou a ID da mensagem, atualiza o embed
+                if msg_id:
+                    # Tenta buscar o canal da mensagem
+                    # Como não sabemos qual canal é, vamos iterar nos canais de texto
+                    guild = interaction.guild
+                    atualizado = False
+                    
+                    for canal in guild.text_channels:
+                        try:
+                            message = await canal.fetch_message(msg_id)
+                            if message:
+                                embed = await criar_embed_produto_vendas(produto_id, produto_info)
+                                if embed and message.view:
+                                    await message.edit(embed=embed, view=message.view)
+                                    atualizado = True
+                                    atualizados += 1
+                                    break
+                        except Exception:
+                            continue
+                            
+                    if not atualizado:
+                        erros += 1
+                else:
                     erros += 1
                     
             except Exception as e:
                 print(f"❌ Erro ao processar produto {produto_id}: {e}")
                 erros += 1
         
-        # 3. Enviar relatório ao usuário
+        # 4. Enviar relatório ao usuário
         await interaction.followup.send(
             f"✅ **Sincronização de estoque concluída!**\n\n"
             f"🔄 **{atualizados}** produtos atualizados com o estoque real.\n"
-            f"⚠️ **{erros}** produtos não puderam ser atualizados (canal apagado ou permissão negada).",
+            f"⚠️ **{erros}** produtos não puderam ser atualizados (use /recriar_canais para mapear novamente).",
             ephemeral=True
         )
     except Exception as e:
