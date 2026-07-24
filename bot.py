@@ -1251,7 +1251,7 @@ async def configurar_produto(interaction: discord.Interaction, produto_id: str):
         
         # Criar o embed e a view
         embed = await criar_embed_produto_vendas(produto_id, produto)
-        view = ProdutoView(produto_id, produto)
+        view = ComprarProdutoView(produto_id)
         
         # Enviar a mensagem e salvar a ID no mapeamento
         if embed and view:
