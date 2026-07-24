@@ -1219,6 +1219,65 @@ async def criar_produto(
         print(f"❌ Erro ao criar produto: {e}")
         await interaction.response.send_message(f"❌ Erro: {e}", ephemeral=True)
 
+# ===============================
+# COMANDO DE SINCRONIZAÇÃO DE ESTOQUE
+# ===============================
+
+@bot.tree.command(name="estoque", description="[ADMIN] Atualiza o estoque público de todos os produtos com base no inventário real.")
+async def sincronizar_estoque(interaction: discord.Interaction):
+    try:
+        if interaction.user.id != MEU_ID and CARGO_ADMIN not in [role.id for role in interaction.user.roles]:
+            await interaction.response.send_message("❌ Apenas administradores podem usar este comando!", ephemeral=True)
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        atualizados = 0
+        canal_falha = 0
+        
+        for produto_id, produto_info in produtos_disponiveis.items():
+            qtd_estoque = verificar_estoque(produto_id)
+            
+            # Soma estoque de variações, se houver
+            if produto_info.get("tipo") == "auto" and produto_info.get("variacoes"):
+                for variacao in produto_info.get("variacoes"):
+                    qtd_estoque += verificar_estoque(produto_id, variacao.get("nome"))
+            
+            # Tenta atualizar a mensagem no canal público
+            guild = interaction.guild
+            if not guild:
+                continue
+                
+            # Tenta encontrar um canal que tenha a mensagem do produto
+            # (Esta parte depende de como o canal é configurado, vamos iterar pelos canais de texto)
+            for canal in guild.text_channels:
+                try:
+                    # Busca mensagens recentes para ver se é um cartão de produto
+                    async for message in canal.history(limit=10):
+                        if message.author == bot.user and message.embeds and any(
+                            emb.title == produto_info.get("nome") for emb in message.embeds
+                        ):
+                            # Recria o embed com o estoque atualizado
+                            embed = await criar_embed_produto_vendas(produto_id, produto_info)
+                            if embed and message.view:
+                                await message.edit(embed=embed, view=message.view)
+                                atualizados += 1
+                            break
+                except Exception as e:
+                    print(f"❌ Erro ao atualizar canal {canal.name}: {e}")
+                    canal_falha += 1
+        
+        await interaction.followup.send(
+            f"✅ Sincronização concluída!\n"
+            f"🔄 **{atualizados}** cartões de produto atualizados com o estoque real.\n"
+            f"⚠️ Falhas na atualização: **{canal_falha}**.",
+            ephemeral=True
+        )
+    except Exception as e:
+        print(f"❌ Erro ao sincronizar estoque: {e}")
+        await interaction.followup.send(f"❌ Erro: {e}", ephemeral=True)
+        await interaction.response.send_message(f"❌ Erro: {e}", ephemeral=True)
+
 @bot.tree.command(name="editar_preco", description="[ADMIN] Alterar preço de um produto")
 @app_commands.describe(
     produto_id="ID do produto",
