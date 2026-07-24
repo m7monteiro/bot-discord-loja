@@ -1233,50 +1233,71 @@ async def sincronizar_estoque(interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         
         atualizados = 0
-        canal_falha = 0
+        erros = 0
         
+        # 1. Iterar por todos os produtos cadastrados
         for produto_id, produto_info in produtos_disponiveis.items():
-            qtd_estoque = verificar_estoque(produto_id)
-            
-            # Soma estoque de variações, se houver
-            if produto_info.get("tipo") == "auto" and produto_info.get("variacoes"):
-                for variacao in produto_info.get("variacoes"):
-                    qtd_estoque += verificar_estoque(produto_id, variacao.get("nome"))
-            
-            # Tenta atualizar a mensagem no canal público
-            guild = interaction.guild
-            if not guild:
-                continue
+            try:
+                # Contar o estoque real
+                qtd_estoque = verificar_estoque(produto_id)
                 
-            # Tenta encontrar um canal que tenha a mensagem do produto
-            # (Esta parte depende de como o canal é configurado, vamos iterar pelos canais de texto)
-            for canal in guild.text_channels:
-                try:
-                    # Busca mensagens recentes para ver se é um cartão de produto
-                    async for message in canal.history(limit=10):
-                        if message.author == bot.user and message.embeds and any(
-                            emb.title == produto_info.get("nome") for emb in message.embeds
-                        ):
-                            # Recria o embed com o estoque atualizado
-                            embed = await criar_embed_produto_vendas(produto_id, produto_info)
-                            if embed and message.view:
-                                await message.edit(embed=embed, view=message.view)
-                                atualizados += 1
-                            break
-                except Exception as e:
-                    print(f"❌ Erro ao atualizar canal {canal.name}: {e}")
-                    canal_falha += 1
+                # Soma estoque de variações, se houver
+                if produto_info.get("tipo") == "auto" and produto_info.get("variacoes"):
+                    for variacao in produto_info.get("variacoes"):
+                        qtd_estoque += verificar_estoque(produto_id, variacao.get("nome"))
+                
+                # 2. Encontrar a mensagem do produto no servidor
+                guild = interaction.guild
+                if not guild:
+                    continue
+                
+                encontrado_e_atualizado = False
+                
+                # Iterar pelos canais de texto do servidor
+                for canal in guild.text_channels:
+                    try:
+                        # Buscar as últimas 50 mensagens do canal
+                        async for message in canal.history(limit=50):
+                            # Verificar se a mensagem é do bot e tem um embed com o título exato do produto
+                            if message.author == bot.user and message.embeds:
+                                for emb in message.embeds:
+                                    # Comparamos o título do embed com o nome do produto
+                                    if emb.title == produto_info.get("nome"):
+                                        
+                                        # Recriar o embed com o estoque real
+                                        embed = await criar_embed_produto_vendas(produto_id, produto_info)
+                                        
+                                        # Se o embed foi criado com sucesso e a mensagem tem o botão
+                                        if embed and message.view:
+                                            # Editar a mensagem no Discord
+                                            await message.edit(embed=embed, view=message.view)
+                                            encontrado_e_atualizado = True
+                                            atualizados += 1
+                                            break
+                                
+                                if encontrado_e_atualizado:
+                                    break
+                    except Exception as e:
+                        print(f"⚠️ Sem permissão ou erro ao ler canal {canal.name}: {e}")
+                
+                if not encontrado_e_atualizado:
+                    print(f"❌ Canal ou embed do produto '{produto_info.get('nome')}' não encontrado!")
+                    erros += 1
+                    
+            except Exception as e:
+                print(f"❌ Erro ao processar produto {produto_id}: {e}")
+                erros += 1
         
+        # 3. Enviar relatório ao usuário
         await interaction.followup.send(
-            f"✅ Sincronização concluída!\n"
-            f"🔄 **{atualizados}** cartões de produto atualizados com o estoque real.\n"
-            f"⚠️ Falhas na atualização: **{canal_falha}**.",
+            f"✅ **Sincronização de estoque concluída!**\n\n"
+            f"🔄 **{atualizados}** produtos atualizados com o estoque real.\n"
+            f"⚠️ **{erros}** produtos não puderam ser atualizados (canal apagado ou permissão negada).",
             ephemeral=True
         )
     except Exception as e:
-        print(f"❌ Erro ao sincronizar estoque: {e}")
-        await interaction.followup.send(f"❌ Erro: {e}", ephemeral=True)
-        await interaction.response.send_message(f"❌ Erro: {e}", ephemeral=True)
+        print(f"❌ Erro global no comando /estoque: {e}")
+        await interaction.followup.send(f"❌ Erro inesperado: {e}", ephemeral=True)
 
 @bot.tree.command(name="editar_preco", description="[ADMIN] Alterar preço de um produto")
 @app_commands.describe(
