@@ -812,75 +812,75 @@ async def listar_produtos(interaction: discord.Interaction):
         await interaction.response.send_message(f"❌ Erro: {e}", ephemeral=True)
 
 # ===============================
-# NOVO DESIGN DE PRODUTO - ESTILO TZADA STORE
+# DESIGN DE PRODUTO - CARTÃO DE VENDAS
 # ===============================
 
-async def criar_embed_produto_tzada(produto_id: str, produto_info: dict):
-    """Cria um único embed estilo Tzada Store com imagem no topo e texto embaixo"""
+async def criar_embed_produto_vendas(produto_id: str, produto_info: dict):
+    """Monta a vitrine pública de um produto no padrão de cartão de vendas."""
     try:
-        imagem_url = produto_info.get('imagem', '')
-        qtd_variacoes = len(produto_info.get("variacoes", []))
+        nome = str(produto_info.get("nome") or produto_id).strip()
+        imagem_url = str(produto_info.get("imagem") or "").strip()
+        descricao_bruta = str(produto_info.get("descricao") or "").strip()
+        preco = float(produto_info.get("preco", 0))
+        variacoes = produto_info.get("variacoes") or []
+        qtd_variacoes = len(variacoes)
         qtd_estoque = verificar_estoque(produto_id)
-        tipo_entrega = "🤖 Entrega Automática!" if produto_info.get('tipo') == 'auto' else "👨‍💼 Entrega Manual"
-        
-        # Construir descrição com benefícios (estilo Tzada)
-        descricao = produto_info.get('descricao', 'Sem descrição')
-        
-        # Se houver benefícios (separados por |), formatá-los com checkmarks
-        if '|' in descricao:
-            beneficios = [b.strip() for b in descricao.split('|')]
-            descricao_formatada = "\n".join([f"✅ {b}" for b in beneficios if b])
+
+        # Quando há opções, a vitrine deve mostrar o total de todas elas.
+        if produto_info.get("tipo") == "auto" and variacoes:
+            qtd_estoque += sum(
+                verificar_estoque(produto_id, variacao.get("nome"))
+                for variacao in variacoes
+                if variacao.get("nome")
+            )
+
+        # O comando /criar_produto usa "|" para separar os benefícios.
+        beneficios = [
+            beneficio.strip(" •-\t")
+            for beneficio in descricao_bruta.split("|")
+            if beneficio.strip(" •-\t")
+        ]
+        if not beneficios and descricao_bruta:
+            beneficios = [descricao_bruta]
+
+        descricao_formatada = "\n".join(f"• {beneficio}" for beneficio in beneficios)
+        if not descricao_formatada:
+            descricao_formatada = "• Informações do produto serão enviadas após a compra."
+
+        if produto_info.get("tipo") == "auto":
+            unidade = "unidade" if qtd_estoque == 1 else "unidades"
+            estoque_formatado = f"**{qtd_estoque} {unidade}**"
         else:
-            descricao_formatada = f"✅ {descricao}"
-        
-        # Adicionar informações de estoque
-        estoque_info = ""
-        if produto_info.get('tipo') == 'auto':
-            estoque_info = f"\n📦 Estoque: {qtd_estoque} unidades"
-        
-        # ✅ CRIAR UM Único EMBED COM IMAGEM NO TOPO
+            estoque_formatado = "**Consulte a disponibilidade**"
+
+        opcoes_formatadas = ""
+        if qtd_variacoes:
+            variacao = "variação" if qtd_variacoes == 1 else "variações"
+            opcoes_formatadas = f"\nOpções: **{qtd_variacoes} {variacao}**"
+
+        descricao = (
+            f"{descricao_formatada}\n\n"
+            "🚨 Em caso de dúvidas, abra um ticket para atendimento.\n"
+            "────────────────────────\n"
+            f"Estoque: {estoque_formatado}\n"
+            f"Preço: **R$ {preco:.2f}**"
+            f"{opcoes_formatadas}\n\n"
+            "Clique no botão **\"Comprar\"** abaixo para continuar."
+        )
+
         embed = discord.Embed(
-            color=0xffa500  # Laranja vibrante como Tzada
+            title=nome,
+            description=descricao,
+            color=0x2B2D31
         )
-        
-        # ✅ ADICIONAR IMAGEM COMO THUMBNAIL (PEQUENA NO CANTO)
-        # Depois vamos usar set_image para forçar no topo
-        if imagem_url and imagem_url != "":
-            # Usar set_image para forçar a imagem no topo
+
+        # A imagem é exibida na parte inferior do cartão, como na referência.
+        if imagem_url:
             embed.set_image(url=imagem_url)
-        
-        # ✅ ADICIONAR TÍTULO E DESCRIÇÃO
-        embed.title = f"⚡ {tipo_entrega}"
-        embed.description = f"**{produto_info['nome']}**\n\n{descricao_formatada}{estoque_info}"
-        
-        # Campos de Valor e Estoque lado a lado
-        embed.add_field(
-            name="💰 Valor à vista",
-            value=f"R$ {produto_info['preco']:.2f}",
-            inline=True
-        )
-        
-        if produto_info.get('tipo') == 'auto':
-            embed.add_field(
-                name="📦 Restam",
-                value=f"{qtd_estoque}",
-                inline=True
-            )
-        
-        # Adicionar variações se houver
-        if qtd_variacoes > 0:
-            embed.add_field(
-                name="🎮 Opções Disponíveis",
-                value=f"{qtd_variacoes} variações",
-                inline=True
-            )
-        
-        embed.set_footer(text="M7 STORE - Clique no botão abaixo para comprar!")
-        embed.timestamp = datetime.now()
-        
-        return embed  # Retorna um único embed
-    except Exception as e:
-        print(f"❌ Erro ao criar embed Tzada: {e}")
+
+        return embed
+    except (TypeError, ValueError) as e:
+        print(f"❌ Erro ao criar embed de produto: {e}")
         return None
 
 class ProdutoCompraView(discord.ui.View):
@@ -890,7 +890,7 @@ class ProdutoCompraView(discord.ui.View):
         self.produto_nome = produto_nome
         self.variacoes = variacoes or []
     
-    @discord.ui.button(label="🛒 Comprar", style=discord.ButtonStyle.success, custom_id="btn_comprar")
+    @discord.ui.button(label="🛒 Comprar", style=discord.ButtonStyle.danger, custom_id="btn_comprar")
     async def comprar(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
         
@@ -987,7 +987,7 @@ async def configurar_produto(
         if not canal:
             canal = await guild.create_text_channel(nome_canal)
         
-        embed = await criar_embed_produto_tzada(produto_id, produto_info)
+        embed = await criar_embed_produto_vendas(produto_id, produto_info)
         if not embed:
             await interaction.followup.send("❌ Erro ao criar embed do produto.", ephemeral=True)
             return
@@ -1098,7 +1098,7 @@ async def sincronizar_canal(interaction: discord.Interaction, produto_id: str):
         produto_info = produtos_disponiveis[produto_id]
         canal = interaction.channel
         
-        embed = await criar_embed_produto_tzada(produto_id, produto_info)
+        embed = await criar_embed_produto_vendas(produto_id, produto_info)
         if not embed:
             await interaction.followup.send("❌ Erro ao criar embed do produto.", ephemeral=True)
             return
