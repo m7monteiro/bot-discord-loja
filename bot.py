@@ -577,11 +577,11 @@ async def ver_estoque(interaction: discord.Interaction, produto_id: str, variaca
     await interaction.response.defer(ephemeral=True)
     try:
         if interaction.user.id != MEU_ID:
-            await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
+            await interaction.followup.send("❌ Apenas o dono pode usar este comando.", ephemeral=True)
             return
         
         if produto_id not in produtos_disponiveis:
-            await interaction.response.send_message(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
+            await interaction.followup.send(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
             return
         
         produto = produtos_disponiveis[produto_id]
@@ -592,7 +592,7 @@ async def ver_estoque(interaction: discord.Interaction, produto_id: str, variaca
             itens = estoque_disponivel.get(produto_id, {}).get("itens", [])
         
         if not itens:
-            await interaction.response.send_message(f"📦 **{produto['nome']}**\n\nEstoque vazio!", ephemeral=True)
+            await interaction.followup.send(f"📦 **{produto['nome']}**\n\nEstoque vazio!", ephemeral=True)
             return
         
         descricao = ""
@@ -606,10 +606,10 @@ async def ver_estoque(interaction: discord.Interaction, produto_id: str, variaca
         )
         embed.set_footer(text=f"Total: {len(itens)} itens | Use /remover_estoque com o índice")
         
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=True)
     except Exception as e:
         print(f"❌ Erro ao ver estoque: {e}")
-        await interaction.response.send_message(f"❌ Erro: {e}", ephemeral=True)
+        await interaction.followup.send(f"❌ Erro: {e}", ephemeral=True)
 
 # ===============================
 # COMANDOS DE ADMIN - VARIAÇÕES
@@ -662,18 +662,18 @@ async def listar_variacoes(interaction: discord.Interaction, produto_id: str):
     await interaction.response.defer(ephemeral=True)
     try:
         if interaction.user.id != MEU_ID:
-            await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
+            await interaction.followup.send("❌ Apenas o dono pode usar este comando.", ephemeral=True)
             return
         
         if produto_id not in produtos_disponiveis:
-            await interaction.response.send_message(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
+            await interaction.followup.send(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
             return
         
         produto = produtos_disponiveis[produto_id]
         variacoes = produto.get("variacoes", [])
         
         if not variacoes:
-            await interaction.response.send_message(f"📦 **{produto['nome']}**\n\nNenhuma variação cadastrada.\n\nUse `/add_variacao` para criar!", ephemeral=True)
+            await interaction.followup.send(f"📦 **{produto['nome']}**\n\nNenhuma variação cadastrada.\n\nUse `/add_variacao` para criar!", ephemeral=True)
             return
         
         descricao = ""
@@ -687,10 +687,10 @@ async def listar_variacoes(interaction: discord.Interaction, produto_id: str):
         )
         embed.set_footer(text="Use /editar_variacao ou /remover_variacao com o índice")
         
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=True)
     except Exception as e:
         print(f"❌ Erro ao listar variações: {e}")
-        await interaction.response.send_message(f"❌ Erro: {e}", ephemeral=True)
+        await interaction.followup.send(f"❌ Erro: {e}", ephemeral=True)
 
 @bot.tree.command(name="editar_variacao", description="[ADMIN] Editar nome ou preço de uma variação")
 @app_commands.describe(
@@ -784,7 +784,7 @@ async def listar_produtos(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     try:
         if not produtos_disponiveis:
-            await interaction.response.send_message("📦 **Nenhum produto cadastrado ainda!**\n\nUse `/criar_produto` para adicionar.", ephemeral=True)
+            await interaction.followup.send("📦 **Nenhum produto cadastrado ainda!**\n\nUse `/criar_produto` para adicionar.", ephemeral=True)
             return
         
         embed = discord.Embed(
@@ -810,10 +810,10 @@ async def listar_produtos(interaction: discord.Interaction):
             )
         
         embed.set_footer(text="M7 STORE")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=True)
     except Exception as e:
         print(f"❌ Erro ao listar produtos: {e}")
-        await interaction.response.send_message(f"❌ Erro: {e}", ephemeral=True)
+        await interaction.followup.send(f"❌ Erro: {e}", ephemeral=True)
 
 # ===============================
 # DESIGN DE PRODUTO - CARTÃO DE VENDAS
@@ -1093,7 +1093,7 @@ async def sincronizar_canal(interaction: discord.Interaction, produto_id: str):
     await interaction.response.defer(ephemeral=True)
     try:
         if interaction.user.id != MEU_ID:
-            await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
+            await interaction.followup.send("❌ Apenas o dono pode usar este comando.", ephemeral=True)
             return
         
         await interaction.response.defer(ephemeral=True)
@@ -1128,7 +1128,7 @@ async def configurar_2fa(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     try:
         if interaction.user.id != MEU_ID:
-            await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
+            await interaction.followup.send("❌ Apenas o dono pode usar este comando.", ephemeral=True)
             return
         
         embed = discord.Embed(
@@ -1142,10 +1142,10 @@ async def configurar_2fa(interaction: discord.Interaction):
         embed.set_footer(text="M7 STORE - Segurança em primeiro lugar")
         
         await interaction.channel.send(embed=embed, view=Canal2FAView())
-        await interaction.response.send_message("✅ Canal de 2FA configurado!", ephemeral=True)
+        await interaction.followup.send("✅ Canal de 2FA configurado!", ephemeral=True)
     except Exception as e:
         print(f"❌ Erro ao configurar 2FA: {e}")
-        await interaction.response.send_message(f"❌ Erro: {e}", ephemeral=True)
+        await interaction.followup.send(f"❌ Erro: {e}", ephemeral=True)
 
 @bot.tree.command(name="set_imagem", description="[ADMIN] Definir imagem de um produto")
 @app_commands.describe(produto_id="ID do produto", url_imagem="URL da imagem")
@@ -1153,23 +1153,23 @@ async def set_imagem(interaction: discord.Interaction, produto_id: str, url_imag
     await interaction.response.defer(ephemeral=True)
     try:
         if interaction.user.id != MEU_ID:
-            await interaction.response.send_message("❌ Apenas o dono pode usar este comando.", ephemeral=True)
+            await interaction.followup.send("❌ Apenas o dono pode usar este comando.", ephemeral=True)
             return
         
         if produto_id not in produtos_disponiveis:
-            await interaction.response.send_message(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
+            await interaction.followup.send(f"❌ Produto `{produto_id}` não encontrado!", ephemeral=True)
             return
         
         produtos_disponiveis[produto_id]["imagem"] = url_imagem
         salvar_produtos(produtos_disponiveis)
         
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"✅ Imagem atualizada!\n🖼️ Nova imagem: {url_imagem}\n\n💡 Use `/sincronizar_canal {produto_id}` para aplicar.",
             ephemeral=True
         )
     except Exception as e:
         print(f"❌ Erro ao definir imagem: {e}")
-        await interaction.response.send_message(f"❌ Erro: {e}", ephemeral=True)
+        await interaction.followup.send(f"❌ Erro: {e}", ephemeral=True)
 
 # ===============================
 # COMANDOS DE ADMIN (GERENCIAMENTO BASE)
